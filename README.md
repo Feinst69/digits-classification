@@ -1,3 +1,5 @@
+![alt text](images/image-4.png)
+
 # Techniques d'amélioration des réseaux CNN
 
 ## Couches et structure

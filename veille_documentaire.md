@@ -19,10 +19,32 @@ Couches Entièrement Connectées : Ces couches prennent les caractéristiques de
 
 Couches de Dropout : Pour éviter le surapprentissage (overfitting), les couches de dropout désactivent aléatoirement une fraction des neurones pendant l'entraînement, favorisant ainsi la capacité du réseau à généraliser.
 
-![alt text](image.png)
-![alt text](image-1.png)
-![alt text](image-2.png)
+![alt text](images/image.png)
+![alt text](images/image-1.png)
+![alt text](images/image-2.png)
 
-https://medium.com/@draj0718/convolutional-neural-networks-cnn-architectures-explained-716fb197b243
+Sources:
+- https://medium.com/@draj0718/convolutional-neural-networks-cnn-architectures-explained-716fb197b243
+- https://learnopencv.com/understanding-convolutional-neural-networks-cnn/?utm_source=chatgpt.com
 
-2.
+## 2. Donnez le principe de fonctionnement d’une couche convolutive. Qu’est ce qu’un filtre de convolution ?
+
+![alt text](images/image-3.png)
+![alt text](images/image-5.png)
+
+Sources:
+- https://www.innovatiana.com/post/convolutional-neural-network?utm_source=chatgpt.com
+
+## 3. Comment un filtre de convolution est-il appliqué à une image en entrée ? Qu’est ce qui en résulte ? En quoi est-il utile pour la détection d'objets ?
+
+La couche convolutive fonctionne donc en faisant glisser un filtre de convolution sur l'image d'entrée.
+Les filtres sont généralement de petites matrices (3x3 - 5x5).
+Elle effectue sur chaque position une opération de produit scalaire entre le filtre et la portion correspondante de l'image. Le résultat de cette opération est une carte de caractéristiques qui met en avant certaines caractéristiques de l'image et facilite le processus de détection d'objets.
+
+
+Sources:
+- https://blent.ai/blog/a/cnn-comment-ca-marche
+
+
+
+images/
