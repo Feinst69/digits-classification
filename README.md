@@ -7,6 +7,7 @@ Cette application Flask utilise un réseau de neurones convolutif (CNN) pour rec
 - Interface de dessin interactive pour dessiner un chiffre
 - Glisser-déposer ou téléchargement d'images de chiffres
 - Visualisation des résultats avec graphiques de probabilités
+- Historique des prédictions avec visualisation des dernières analyses
 - API JSON pour l'intégration avec d'autres applications
 
 ## Structure du Projet
@@ -52,10 +53,9 @@ pip install -r requirements.txt
 
 ## Exécution de l'Application
 
-1. Lancez l'application Flask :
+1. Exécutez simplement la commande suivante à la racine du projet :
 ```bash
-cd app
-python script.py
+python run_app.py
 ```
 
 2. Ouvrez votre navigateur et accédez à :
@@ -72,6 +72,11 @@ http://localhost:5000
 ### Télécharger une Image
 1. Glissez-déposez une image dans la zone prévue ou cliquez pour sélectionner une image
 2. L'analyse se lancera automatiquement après le téléchargement
+
+### Historique des Prédictions
+1. Cliquez sur le lien "Voir l'historique des prédictions" en bas de la page d'accueil
+2. Parcourez les dernières prédictions effectuées (jusqu'à 10 prédictions sont conservées)
+3. Utilisez le bouton "Retour" pour revenir à la page principale
 
 ## API JSON
 
