@@ -1,43 +1,91 @@
-![alt text](images/image-4.png)
+# Application de Reconnaissance de Chiffres Manuscrits
 
-# Techniques d'amélioration des réseaux CNN
+Cette application Flask utilise un réseau de neurones convolutif (CNN) pour reconnaître des chiffres manuscrits. Elle offre deux méthodes d'entrée : le dessin direct sur un canvas et le téléchargement d'images.
 
-## Couches et structure
+## Fonctionnalités
 
-### Conv2D avec padding='same'
-Maintient les dimensions spatiales durant la convolution en ajoutant des zéros autour de l'entrée. Permet de préserver les informations aux bords des images et de construire des réseaux plus profonds.
+- Interface de dessin interactive pour dessiner un chiffre
+- Glisser-déposer ou téléchargement d'images de chiffres
+- Visualisation des résultats avec graphiques de probabilités
+- API JSON pour l'intégration avec d'autres applications
 
-### BatchNormalization
-Normalise les activations d'une couche précédente pour chaque mini-batch. Accélère l'entraînement, permet d'utiliser des taux d'apprentissage plus élevés et réduit la dépendance à l'initialisation des poids.
+## Structure du Projet
 
-### Activation séparée
-Extraction de la fonction d'activation en couche distincte pour plus de clarté. Facilite la visualisation du flux de données et permet une meilleure modularité dans la conception du réseau.
+```
+CNN/
+├── app/                      # Application Flask
+│   ├── static/               # Fichiers statiques (CSS, JS)
+│   │   ├── css/              # Styles CSS
+│   │   ├── js/               # Scripts JavaScript
+│   │   ├── temp/             # Dossier pour les graphiques temporaires
+│   │   └── uploads/          # Dossier pour les images téléchargées
+│   ├── templates/            # Templates HTML
+│   └── script.py             # Script principal Flask
+├── models/                   # Modèles entraînés
+│   └── best_cnn_model.keras  # Modèle CNN utilisé pour les prédictions
+├── src/                      # Code source
+│   └── CNN_MODEL.py          # Classe pour la gestion du modèle
+└── images/                   # Images d'exemple pour les tests
+```
 
-### MaxPool2D
-Réduit la dimension spatiale (largeur et hauteur) des cartes de caractéristiques. Diminue le nombre de paramètres et le temps de calcul tout en rendant le modèle plus robuste aux variations de position.
+## Prérequis
 
-### Dropout
-Désactive aléatoirement un pourcentage de neurones pendant l'entraînement. Fonctionne comme une régularisation, empêche la co-adaptation des neurones et réduit significativement le surapprentissage.
+- Python 3.6+
+- TensorFlow 2.x
+- Flask
+- Pillow
+- NumPy
+- Matplotlib
 
-### Dense avec plus de neurones
-Augmente la capacité du réseau à apprendre des représentations complexes. Capture davantage de caractéristiques abstraites avant la classification finale, améliorant généralement la précision.
+## Installation
 
-## Configuration d'entraînement
+1. Clonez ce dépôt :
+```bash
+git clone <repository-url>
+cd CNN
+```
 
-### Adam optimizer
-Algorithme d'optimisation adaptatif combinant les avantages d'AdaGrad et RMSProp. Ajuste automatiquement les taux d'apprentissage par paramètre et incorpore la notion de momentum pour une convergence plus rapide.
+2. Installez les dépendances :
+```bash
+pip install -r requirements.txt
+```
 
-### EarlyStopping
-Arrête l'entraînement lorsque la métrique surveillée cesse de s'améliorer pendant un nombre défini d'époques. Évite le surapprentissage et économise du temps de calcul en détectant quand le modèle cesse de progresser.
+## Exécution de l'Application
 
-### ReduceLROnPlateau
-Réduit le taux d'apprentissage lorsque la métrique surveillée stagne. Permet d'affiner l'apprentissage dans les dernières phases d'entraînement pour franchir les plateaux de la fonction de coût.
+1. Lancez l'application Flask :
+```bash
+cd app
+python script.py
+```
 
-### ModelCheckpoint
-Sauvegarde le modèle à différents moments de l'entraînement selon un critère défini. Garantit que la meilleure version du modèle est conservée, même si l'entraînement se détériore par la suite.
+2. Ouvrez votre navigateur et accédez à :
+```
+http://localhost:5000
+```
 
-### Validation split
-Réserve une portion des données d'entraînement pour évaluer le modèle pendant l'apprentissage. Fournit un signal crucial sur la capacité de généralisation et aide à détecter le surapprentissage.
+## Utilisation
 
-### Batch size plus grand
-Augmente le nombre d'échantillons traités avant la mise à jour des poids. Stabilise l'entraînement avec des gradients moins bruités et permet une meilleure utilisation du parallélisme matériel.
+### Dessiner un Chiffre
+1. Utilisez la zone de dessin pour dessiner un chiffre en noir sur fond blanc
+2. Cliquez sur "Analyser" pour obtenir la prédiction
+
+### Télécharger une Image
+1. Glissez-déposez une image dans la zone prévue ou cliquez pour sélectionner une image
+2. L'analyse se lancera automatiquement après le téléchargement
+
+## API JSON
+
+L'application fournit également une API JSON pour l'intégration :
+
+- Endpoint : `/api/predict`
+- Méthode : POST
+- Entrées : 
+  - Soit `file` : fichier image
+  - Soit `image_data` : données d'image en base64
+- Sortie : JSON avec les résultats de prédiction
+
+## Développement
+
+- Le modèle CNN a été entraîné sur le dataset MNIST
+- Les différentes versions du modèle (basic, intermediate, best) sont disponibles dans le dossier `models`
+- La classe `CNN_MODEL` centralise toutes les fonctionnalités de prédiction et visualisation

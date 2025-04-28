@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Reconnaissance de Chiffres - Accueil{% endblock %}
+
+{% block content %}
+<div class="app-container">
+    <section class="drawing-section">
+        <h2>Dessiner un chiffre</h2>
+        <div class="canvas-container">
+            <canvas id="canvas" width="280" height="280"></canvas>
+        </div>
+        <div class="drawing-tools">
+            <button id="clear-canvas" class="danger">Effacer</button>
+            <button id="predict-drawing" class="success">Analyser</button>
+        </div>
+        <div id="loader" class="loader"></div>
+        <form id="drawing-form" action="{{ url_for('predict') }}" method="post">
+            <input type="hidden" id="image-data" name="image_data">
+        </form>
+    </section>
+    
+    <section class="upload-section">
+        <h2>Ou téléchargez une image</h2>
+        <div id="dropzone" class="dropzone">
+            <p>Glissez-déposez une image ici ou cliquez pour sélectionner un fichier</p>
+        </div>
+        <div id="loader-upload" class="loader"></div>
+        <form id="upload-form" action="{{ url_for('predict') }}" method="post" enctype="multipart/form-data">
+            <input type="file" id="file-input" name="file" class="file-input" accept="image/*">
+        </form>
+    </section>
+    
+    <section class="instructions">
+        <h2>Comment ça marche ?</h2>
+        <p>Deux options s'offrent à vous pour tester le modèle de reconnaissance de chiffres :</p>
+        <ol>
+            <li>Dessinez un chiffre dans la zone de dessin ci-dessus</li>
+            <li>Ou glissez-déposez une image de chiffre manuscrit</li>
+        </ol>
+    </section>
+    
+    <div class="history-link-container">
+        <a href="{{ url_for('history') }}" class="history-link">Voir l'historique des prédictions</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/draw.js') }}"></script>
+<script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+{% endblock %}

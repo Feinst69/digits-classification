@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Résultat de la Prédiction{% endblock %}
+
+{% block content %}
+<div class="results-section prediction-animation">
+    <div class="results-header">
+        <h2>Résultat de l'analyse</h2>
+        <a href="{{ url_for('index') }}" class="restart-button">Recommencer</a>
+    </div>
+    
+    <div class="result-images">
+        <div>
+            <h3>Visualisation des prédictions</h3>
+            <img src="{{ url_for('static', filename=result.plot_path) }}" alt="Analyse des prédictions" class="result-image" onerror="this.onerror=null; this.src='{{ url_for('static', filename='temp/default.png') }}'; console.log('Erreur lors du chargement de l\'image');">
+        </div>
+    </div>
+    
+    <div class="prediction-result">
+        <h3>Chiffre détecté :</h3>
+        <div class="prediction-value">{{ result.predicted_digit }}</div>
+        <div class="confidence">Confiance : {{ "%.2f"|format(result.confidence) }}%</div>
+    </div>
+    
+    <div class="probabilities-details">
+        <h3>Détail des probabilités :</h3>
+        <table class="prob-table">
+            <thead>
+                <tr>
+                    <th>Chiffre</th>
+                    <th>Probabilité (%)</th>
+                    <th>Visualisation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in result.probabilities %}
+                <tr {% if item.digit == result.predicted_digit %}class="highlighted"{% endif %}>
+                    <td>{{ item.digit }}</td>
+                    <td>{{ "%.2f"|format(item.probability) }}%</td>
+                    <td>
+                        <div class="prob-bar" style="width: {{ item.probability }}%"></div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
