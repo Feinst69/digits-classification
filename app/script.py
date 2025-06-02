@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, Response
 import datetime
 import os
 import numpy as np
@@ -12,72 +12,150 @@ import re
 from PIL import Image
 import io
 
-# Get the absolute path of the app directory
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
+# CRITICAL: Determine paths dynamically from script location
+# This works regardless of where the script is called from
+SCRIPT_PATH = os.path.abspath(__file__)
+APP_DIR = os.path.dirname(SCRIPT_PATH)
 PROJECT_ROOT = os.path.dirname(APP_DIR)
 
-# Add the project root to the path for imports
-sys.path.append(PROJECT_ROOT)
+# Ensure PROJECT_ROOT is in sys.path for imports
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-# Import the CNN_MODEL
-from src.CNN_MODEL import CNN_MODEL
+print(f"[DEBUG] Script path: {SCRIPT_PATH}")
+print(f"[DEBUG] App directory: {APP_DIR}")
+print(f"[DEBUG] Project root: {PROJECT_ROOT}")
+print(f"[DEBUG] Current working directory: {os.getcwd()}")
+print(f"[DEBUG] Python path: {sys.path[:3]}...")  # Show first 3 entries
 
-# Create Flask app with absolute paths for static files
+# Import the CNN_MODEL with error handling
+try:
+    from src.CNN_MODEL import CNN_MODEL
+    print("[DEBUG] Successfully imported CNN_MODEL")
+except ImportError as e:
+    print(f"[ERROR] Failed to import CNN_MODEL: {e}")
+    print(f"[DEBUG] Trying to add project root to path: {PROJECT_ROOT}")
+    sys.path.insert(0, PROJECT_ROOT)
+    try:
+        from src.CNN_MODEL import CNN_MODEL
+        print("[DEBUG] Successfully imported CNN_MODEL after path fix")
+    except ImportError as e2:
+        print(f"[ERROR] Still failed to import CNN_MODEL: {e2}")
+        print("[ERROR] Available files in src/:")
+        src_dir = os.path.join(PROJECT_ROOT, 'src')
+        if os.path.exists(src_dir):
+            print(os.listdir(src_dir))
+        sys.exit(1)
+
+# Create Flask app with absolute paths
 app = Flask(__name__, 
            static_folder=os.path.join(APP_DIR, 'static'),
            static_url_path='/static',
            template_folder=os.path.join(APP_DIR, 'templates'))
 
-# Configure paths using absolute paths
+# Configure all paths as absolute
 app.config['UPLOAD_FOLDER'] = os.path.join(APP_DIR, 'static', 'uploads')
 app.config['TEMP_FOLDER'] = os.path.join(APP_DIR, 'static', 'temp')
 
+# Global variable for model
+cnn_model = None
+
 def ensure_dirs_exist():
-    """Ensure required directories exist with absolute paths"""
-    uploads_dir = app.config['UPLOAD_FOLDER']
-    temp_dir = app.config['TEMP_FOLDER']
+    """Create all required directories"""
+    dirs_to_create = [
+        app.config['UPLOAD_FOLDER'],
+        app.config['TEMP_FOLDER'],
+        os.path.join(APP_DIR, 'static', 'css'),
+        os.path.join(APP_DIR, 'static', 'js'),
+        os.path.join(APP_DIR, 'static', 'ressources')
+    ]
     
-    # DEBUG: Print absolute paths
-    print(f"APP_DIR: {APP_DIR}")
-    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
-    print(f"Uploads directory: {uploads_dir}")
-    print(f"Temp directory: {temp_dir}")
-    print(f"Static folder: {app.static_folder}")
-    
-    # Create directories
-    os.makedirs(uploads_dir, exist_ok=True)
-    os.makedirs(temp_dir, exist_ok=True)
-    
-    # Verify directories exist
-    print(f"Uploads dir exists: {os.path.exists(uploads_dir)}")
-    print(f"Temp dir exists: {os.path.exists(temp_dir)}")
+    for directory in dirs_to_create:
+        os.makedirs(directory, exist_ok=True)
+        print(f"[DEBUG] Directory {directory}: {'exists' if os.path.exists(directory) else 'MISSING'}")
 
-# Create directories at startup
+def load_model():
+    """Load the CNN model with robust path handling"""
+    global cnn_model
+    
+    # Try multiple possible model paths
+    possible_model_paths = [
+        os.path.join(PROJECT_ROOT, 'models', 'best_cnn_model.keras'),
+        os.path.join(PROJECT_ROOT, 'models', 'cnn_model.keras'),
+        os.path.join(PROJECT_ROOT, 'models', 'basic_cnn_model.keras'),
+    ]
+    
+    for model_path in possible_model_paths:
+        print(f"[DEBUG] Trying model path: {model_path}")
+        if os.path.exists(model_path):
+            print(f"[DEBUG] Model file found: {model_path}")
+            try:
+                cnn_model = CNN_MODEL(model_path)
+                print(f"[SUCCESS] Model loaded from: {model_path}")
+                return True
+            except Exception as e:
+                print(f"[ERROR] Failed to load model from {model_path}: {e}")
+                continue
+        else:
+            print(f"[DEBUG] Model file not found: {model_path}")
+    
+    # If no model found, list available files
+    models_dir = os.path.join(PROJECT_ROOT, 'models')
+    if os.path.exists(models_dir):
+        print(f"[DEBUG] Available files in models directory:")
+        for file in os.listdir(models_dir):
+            print(f"  - {file}")
+    else:
+        print(f"[ERROR] Models directory not found: {models_dir}")
+    
+    return False
+
+# Initialize at startup
 ensure_dirs_exist()
+model_loaded = load_model()
 
-# Load the model with absolute path
-model_path = os.path.join(PROJECT_ROOT, 'models', 'best_cnn_model.keras')
-print(f"Loading model from: {model_path}")
-print(f"Model exists: {os.path.exists(model_path)}")
-
-try:
-    cnn_model = CNN_MODEL(model_path)
-    print("Model loaded successfully")
-except Exception as e:
-    print(f"Error loading model: {e}")
-    # You might want to handle this more gracefully in production
+if not model_loaded:
+    print("[WARNING] No model could be loaded. Prediction endpoints will not work.")
 
 # Add favicon route to prevent 404 errors
 @app.route('/favicon.ico')
 def favicon():
-    """Serve favicon or return 204 No Content if not found"""
+    """Handle favicon requests"""
     favicon_path = os.path.join(app.static_folder, 'favicon.ico')
     if os.path.exists(favicon_path):
         return app.send_static_file('favicon.ico')
     else:
-        # Return empty response to prevent 404 errors
-        from flask import Response
-        return Response(status=204)
+        return Response(status=204)  # No Content
+
+# Debug route to check static files
+@app.route('/debug/static')
+def debug_static():
+    """Debug endpoint to check static file paths"""
+    static_info = {
+        'static_folder': app.static_folder,
+        'static_url_path': app.static_url_path,
+        'current_working_dir': os.getcwd(),
+        'app_dir': APP_DIR,
+        'project_root': PROJECT_ROOT,
+        'static_files': {}
+    }
+    
+    # Check if static files exist
+    static_files_to_check = [
+        'css/styles.css',
+        'css/history_styles.css', 
+        'js/draw.js',
+        'js/upload.js'
+    ]
+    
+    for file_path in static_files_to_check:
+        full_path = os.path.join(app.static_folder, file_path)
+        static_info['static_files'][file_path] = {
+            'exists': os.path.exists(full_path),
+            'full_path': full_path
+        }
+    
+    return jsonify(static_info)
 
 @app.context_processor
 def inject_now():
@@ -99,9 +177,7 @@ def get_prediction_files():
             timestamp = int(match.group(1))
             prediction_data.append((filename, timestamp, file_path))
     
-    # Sort by timestamp (descending)
     prediction_data.sort(key=lambda x: x[1], reverse=True)
-    
     return prediction_data[:10]
 
 def get_prediction_info(file_path):
@@ -120,13 +196,12 @@ def get_prediction_info(file_path):
         'digit': digit,
         'confidence': confidence,
         'date': date,
-        'plot_path': os.path.join('static', 'temp', filename)  # Use relative URL path
+        'plot_path': f"static/temp/{filename}"  # Use forward slashes for URLs
     }
 
 @app.route('/')
 def index():
     """Homepage with drawing interface and drag & drop"""
-    ensure_dirs_exist()
     return render_template('index.html')
 
 @app.route('/history')
@@ -150,11 +225,12 @@ def predict():
     """Prediction endpoint"""
     if request.method == 'GET':
         return redirect(url_for('index'))
+    
+    if not cnn_model:
+        return jsonify({'error': 'Model not loaded. Please check server logs.'}), 500
         
     result = None
     error = None
-    
-    ensure_dirs_exist()
     
     try:
         if 'file' in request.files:
@@ -165,14 +241,12 @@ def predict():
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 file.save(filepath)
                 
-                print(f"Image saved to: {filepath}")
-                print(f"Image exists: {os.path.exists(filepath)}")
+                print(f"[DEBUG] Image saved to: {filepath}")
                 
                 result = cnn_model.get_prediction_for_web(image_path=filepath)
-                result['original_image'] = os.path.join('static', 'uploads', filename)  # Use relative URL path
+                result['original_image'] = f"static/uploads/{filename}"  # Use forward slashes for URLs
                 
-                print(f"Original image path: {result['original_image']}")
-                print(f"Plot path: {result['plot_path']}")
+                print(f"[DEBUG] Original image URL: {result['original_image']}")
         
         elif 'image_data' in request.form:
             # Handle drawn image
@@ -187,21 +261,17 @@ def predict():
             with open(filepath, 'wb') as f:
                 f.write(image_binary)
             
-            print(f"Drawn image saved to: {filepath}")
-            print(f"Image exists: {os.path.exists(filepath)}")
+            print(f"[DEBUG] Drawn image saved to: {filepath}")
             
             result = cnn_model.get_prediction_for_web(image_path=filepath)
-            result['original_image'] = os.path.join('static', 'uploads', filename)  # Use relative URL path
-            
-            print(f"Original image path: {result['original_image']}")
-            print(f"Plot path: {result['plot_path']}")
+            result['original_image'] = f"static/uploads/{filename}"  # Use forward slashes for URLs
         
         else:
             error = "No image provided. Please draw or upload an image."
             
     except Exception as e:
         error = f"Prediction error: {str(e)}"
-        print(error)
+        print(f"[ERROR] {error}")
         import traceback
         traceback.print_exc()
     
@@ -213,6 +283,9 @@ def predict():
 @app.route('/api/predict', methods=['POST'])
 def api_predict():
     """JSON API for prediction"""
+    if not cnn_model:
+        return jsonify({'error': 'Model not loaded'}), 500
+    
     try:
         if 'file' in request.files:
             file = request.files['file']
@@ -236,11 +309,11 @@ def api_predict():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # Print configuration info for debugging
-    print(f"App root path: {app.root_path}")
-    print(f"Static folder: {app.static_folder}")
-    print(f"Template folder: {app.template_folder}")
-    print(f"Upload folder: {app.config['UPLOAD_FOLDER']}")
-    print(f"Temp folder: {app.config['TEMP_FOLDER']}")
+    print(f"[DEBUG] Starting Flask app...")
+    print(f"[DEBUG] Static folder: {app.static_folder}")
+    print(f"[DEBUG] Template folder: {app.template_folder}")
+    print(f"[DEBUG] Upload folder: {app.config['UPLOAD_FOLDER']}")
+    print(f"[DEBUG] Temp folder: {app.config['TEMP_FOLDER']}")
+    print(f"[DEBUG] Model loaded: {cnn_model is not None}")
     
-    app.run(debug=True, port=5000, host='0.0.0.0')  # Bind to all interfaces for cloud deployment
+    app.run(debug=True, port=5000, host='0.0.0.0')
