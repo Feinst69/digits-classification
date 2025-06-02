@@ -66,14 +66,30 @@ def get_prediction_files():
     return prediction_data[:10]
 
 def get_prediction_info(file_path):
-    """Extrait les informations de prédiction à partir du nom de fichier."""
+    """Extrait les informations de prédiction à partir du nom de fichier et des métadonnées."""
     filename = os.path.basename(file_path)
     timestamp_pattern = re.compile(r'prediction_(\d+)\.png')
     match = timestamp_pattern.match(filename)
     timestamp = int(match.group(1)) if match else 0
     
+    # Essayer de récupérer les vraies données de prédiction depuis le fichier de métadonnées
+    metadata_file = file_path.replace('.png', '_metadata.json')
+    
+    # Valeurs par défaut si pas de métadonnées
     digit = random.randint(0, 9)
     confidence = random.uniform(80, 100)
+    
+    # Si on a un fichier de métadonnées, l'utiliser
+    if os.path.exists(metadata_file):
+        try:
+            import json
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+                digit = metadata.get('predicted_digit', digit)
+                confidence = metadata.get('confidence', confidence)
+        except:
+            pass  # Utiliser les valeurs par défaut en cas d'erreur
+    
     date = datetime.datetime.fromtimestamp(timestamp).strftime("%d/%m/%Y %H:%M:%S")
     
     return {
@@ -176,52 +192,70 @@ def api_predict():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/predict-with-image', methods=['POST'])
-def api_predict_with_image():
-    """API endpoint qui retourne la prédiction avec l'image redimensionnée en base64"""
+@app.route('/api/predict-and-save', methods=['POST'])
+def api_predict_and_save():
+    """API endpoint qui fait la prédiction, sauvegarde pour l'historique ET retourne JSON"""
     try:
-        processed_image = None
+        filepath = None
         
         if 'file' in request.files:
             file = request.files['file']
             if file.filename != '':
-                image_binary = file.read()
-                results, processed_image = cnn_model.predict_from_image(image_data=image_binary)
+                # Sauvegarder le fichier uploadé pour l'historique
+                filename = str(uuid.uuid4()) + os.path.splitext(file.filename)[1]
+                filepath = os.path.join(UPLOAD_FOLDER, filename)
+                file.save(filepath)
+                
+                # Générer le graphique et les résultats pour l'historique
+                web_result = cnn_model.get_prediction_for_web(image_path=filepath, temp_folder=TEMP_FOLDER)
+                
+                # Aussi obtenir les données pour l'AJAX
+                ajax_results, processed_image = cnn_model.predict_from_image(image_path=filepath)
         
         elif 'image_data' in request.form:
             image_data = request.form['image_data']
             if ',' in image_data:
                 image_data = image_data.split(',')[1]
             
+            # Sauvegarder l'image canvas pour l'historique
             image_binary = base64.b64decode(image_data)
-            results, processed_image = cnn_model.predict_from_image(image_data=image_binary)
+            filename = str(uuid.uuid4()) + '.png'
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            with open(filepath, 'wb') as f:
+                f.write(image_binary)
+            
+            # Générer le graphique et les résultats pour l'historique
+            web_result = cnn_model.get_prediction_for_web(image_path=filepath, temp_folder=TEMP_FOLDER)
+            
+            # Aussi obtenir les données pour l'AJAX
+            ajax_results, processed_image = cnn_model.predict_from_image(image_path=filepath)
         else:
             return jsonify({'error': 'Aucune image fournie'}), 400
         
-        # Convertir l'image redimensionnée en base64 pour l'affichage
+        # Ajouter l'image redimensionnée en base64 pour l'affichage AJAX
         if processed_image is not None:
-            # Convertir l'image numpy en PIL Image
             from PIL import Image as PILImage
             import io
             
-            # L'image est de forme (1, 28, 28, 1), on la redimensionne pour l'affichage
-            img_array = processed_image[0, :, :, 0]  # Enlever les dimensions batch et channel
-            img_array = (img_array * 255).astype('uint8')  # Convertir en 0-255
+            img_array = processed_image[0, :, :, 0]
+            img_array = (img_array * 255).astype('uint8')
             
-            # Créer une image PIL
             pil_img = PILImage.fromarray(img_array, mode='L')
-            
-            # Convertir en base64
             buffer = io.BytesIO()
             pil_img.save(buffer, format='PNG')
             img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
             
-            results['resized_image_base64'] = f"data:image/png;base64,{img_base64}"
+            ajax_results['resized_image_base64'] = f"data:image/png;base64,{img_base64}"
         
-        return jsonify(results)
+        # Ajouter des métadonnées pour l'historique
+        ajax_results['saved_to_history'] = True
+        ajax_results['plot_path'] = web_result.get('plot_path', '') if web_result else ''
+        ajax_results['original_image'] = f"uploads/{filename}" if filepath else ''
+        
+        return jsonify(ajax_results)
         
     except Exception as e:
-        print(f"Erreur dans api_predict_with_image: {e}")
+        print(f"Erreur dans api_predict_and_save: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500

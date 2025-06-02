@@ -250,6 +250,24 @@ class CNN_MODEL:
             print(f"Graphique sauvegardé dans: {output_path}")
             print(f"Le fichier existe: {os.path.exists(output_path)}")
             
+            # Sauvegarder les métadonnées pour l'historique
+            metadata_path = output_path.replace('.png', '_metadata.json')
+            import json
+            metadata = {
+                'predicted_digit': results['predicted_digit'],
+                'confidence': results['confidence'],
+                'probabilities': results['probabilities'],
+                'timestamp': timestamp,
+                'original_size': results['original_size']
+            }
+            
+            try:
+                with open(metadata_path, 'w') as f:
+                    json.dump(metadata, f)
+                print(f"Métadonnées sauvegardées dans: {metadata_path}")
+            except Exception as meta_error:
+                print(f"Erreur lors de la sauvegarde des métadonnées: {meta_error}")
+            
             # Utiliser un chemin relatif pour Flask
             plot_path = 'temp/' + output_filename
             

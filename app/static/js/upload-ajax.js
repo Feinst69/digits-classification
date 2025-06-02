@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData();
         formData.append('file', file);
         
-        fetch('/api/predict-with-image', {
+        fetch('/api/predict-and-save', {
             method: 'POST',
             body: formData
         })

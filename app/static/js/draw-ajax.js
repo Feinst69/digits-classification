@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData();
         formData.append('image_data', imageData);
         
-        fetch('/api/predict', {
+        fetch('/api/predict-and-save', {
             method: 'POST',
             body: formData
         })

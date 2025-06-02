@@ -63,9 +63,9 @@ def test_api_predict():
         print(f"❌ Erreur lors du test API: {e}")
         return False
 
-def test_api_predict_with_image():
-    """Tester l'endpoint API /api/predict-with-image"""
-    print("\n🧪 Test de l'API /api/predict-with-image...")
+def test_api_predict_and_save():
+    """Tester l'endpoint API /api/predict-and-save"""
+    print("\n🧪 Test de l'API /api/predict-and-save...")
     
     # Créer une image de test
     test_img = create_test_digit_image(5)
@@ -79,11 +79,11 @@ def test_api_predict_with_image():
     files = {'file': ('test_digit.png', img_buffer, 'image/png')}
     
     try:
-        response = requests.post(f"{BASE_URL}/api/predict-with-image", files=files, timeout=10)
+        response = requests.post(f"{BASE_URL}/api/predict-and-save", files=files, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            print(f"✅ API /api/predict-with-image fonctionne")
+            print(f"✅ API /api/predict-and-save fonctionne")
             print(f"   Prédiction: {data.get('predicted_digit', 'N/A')}")
             print(f"   Confiance: {data.get('confidence', 'N/A'):.2f}%")
             
@@ -91,6 +91,11 @@ def test_api_predict_with_image():
                 print(f"   ✅ Image redimensionnée incluse")
             else:
                 print(f"   ⚠️ Image redimensionnée manquante")
+                
+            if data.get('saved_to_history', False):
+                print(f"   ✅ Sauvegardé dans l'historique")
+            else:
+                print(f"   ⚠️ Pas sauvegardé dans l'historique")
             
             return True
         else:
@@ -118,7 +123,7 @@ def test_canvas_data():
     data = {'image_data': canvas_data}
     
     try:
-        response = requests.post(f"{BASE_URL}/api/predict", data=data, timeout=10)
+        response = requests.post(f"{BASE_URL}/api/predict-and-save", data=data, timeout=10)
         
         if response.status_code == 200:
             result = response.json()
@@ -172,6 +177,40 @@ def test_main_page():
         print(f"❌ Erreur lors du test page principale: {e}")
         return False
 
+def test_history_page():
+    """Tester que la page d'historique se charge et affiche les prédictions"""
+    print("\n🧪 Test de la page d'historique...")
+    
+    try:
+        response = requests.get(f"{BASE_URL}/history", timeout=5)
+        
+        if response.status_code == 200:
+            content = response.text
+            
+            # Vérifier que les éléments clés sont présents
+            checks = [
+                ('history-section', 'history-section' in content or 'history' in content.lower()),
+                ('predictions', 'prediction' in content.lower()),
+                ('base-template', 'html' in content.lower())
+            ]
+            
+            all_good = True
+            for check_name, check_result in checks:
+                if check_result:
+                    print(f"   ✅ {check_name} présent")
+                else:
+                    print(f"   ❌ {check_name} manquant")
+                    all_good = False
+            
+            return all_good
+        else:
+            print(f"❌ Erreur page historique: {response.status_code}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Erreur lors du test page historique: {e}")
+        return False
+
 def check_server_running():
     """Vérifier si le serveur Flask est en marche"""
     print("🔍 Vérification du serveur Flask...")
@@ -205,8 +244,9 @@ def main():
     tests = [
         test_main_page,
         test_api_predict,
-        test_api_predict_with_image,
-        test_canvas_data
+        test_api_predict_and_save,
+        test_canvas_data,
+        test_history_page
     ]
     
     results = []
@@ -225,6 +265,12 @@ def main():
         print(f"🎉 Tous les tests passent! ({passed}/{total})")
         print("\n✨ L'application AJAX est prête à être utilisée!")
         print(f"🌐 Accédez à: {BASE_URL}")
+        print("\n📚 FONCTIONNALITÉS TESTÉES:")
+        print("   ✅ Interface principale avec prédiction automatique")
+        print("   ✅ API de prédiction simple")
+        print("   ✅ API de prédiction avec sauvegarde historique")
+        print("   ✅ Support des données canvas (dessins)")
+        print("   ✅ Page d'historique des prédictions")
     else:
         print(f"⚠️ {passed}/{total} tests passent")
         print("🔧 Vérifiez les erreurs ci-dessus")
