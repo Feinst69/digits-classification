@@ -1,28 +1,35 @@
 """
-Script de lancement pour l'application de reconnaissance de chiffres
-Version simplifiée avec gestion des chemins améliorée
+Lanceur simple pour l'application de reconnaissance de chiffres
+Lance l'application depuis le répertoire racine du projet
 """
 import os
 import sys
+import subprocess
 
 def main():
-    """
-    Lance l'application Flask avec une gestion des chemins simplifiée
-    """
-    # Obtenir le chemin absolu du répertoire du projet
+    """Lance l'application Flask"""
+    # S'assurer qu'on est dans le bon répertoire
     project_root = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(project_root)
     
-    # Ajouter le répertoire racine au chemin Python
-    sys.path.insert(0, project_root)
+    # Chemin vers l'application
+    app_script = os.path.join('app', 'app.py')
     
-    # Importer et lancer l'application
-    from app.script import app
+    if not os.path.exists(app_script):
+        print(f"Erreur: {app_script} n'existe pas")
+        sys.exit(1)
     
-    print(f"Répertoire du projet: {project_root}")
-    print("Lancement de l'application Flask...")
+    print(f"Démarrage de l'application depuis: {project_root}")
+    print(f"Script: {app_script}")
     
-    # Lancer l'application depuis le répertoire racine du projet
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    # Lancer l'application
+    try:
+        subprocess.run([sys.executable, app_script], cwd=project_root)
+    except KeyboardInterrupt:
+        print("\nArrêt de l'application")
+    except Exception as e:
+        print(f"Erreur: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
