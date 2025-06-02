@@ -12,61 +12,83 @@ import re
 from PIL import Image
 import io
 
-# Ajouter le répertoire parent au chemin d'importation
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Get the absolute path of the app directory
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(APP_DIR)
 
-# Importer la classe CNN_MODEL
+# Add the project root to the path for imports
+sys.path.append(PROJECT_ROOT)
+
+# Import the CNN_MODEL
 from src.CNN_MODEL import CNN_MODEL
 
-# Définir le bon chemin pour les fichiers statiques
-app = Flask(__name__, static_folder='static', static_url_path='/static')
+# Create Flask app with absolute paths for static files
+app = Flask(__name__, 
+           static_folder=os.path.join(APP_DIR, 'static'),
+           static_url_path='/static',
+           template_folder=os.path.join(APP_DIR, 'templates'))
 
-# Configurer les dossiers pour les fichiers statiques et les uploads
-app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
-app.config['TEMP_FOLDER'] = os.path.join('static', 'temp')
+# Configure paths using absolute paths
+app.config['UPLOAD_FOLDER'] = os.path.join(APP_DIR, 'static', 'uploads')
+app.config['TEMP_FOLDER'] = os.path.join(APP_DIR, 'static', 'temp')
 
-# S'assurer que les dossiers nécessaires existent
 def ensure_dirs_exist():
-    uploads_dir = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'])
-    temp_dir = os.path.join(app.root_path, app.config['TEMP_FOLDER'])
+    """Ensure required directories exist with absolute paths"""
+    uploads_dir = app.config['UPLOAD_FOLDER']
+    temp_dir = app.config['TEMP_FOLDER']
     
-    # DEBUG: Afficher les chemins
-    print(f"Dossier uploads: {uploads_dir}")
-    print(f"Dossier temp: {temp_dir}")
+    # DEBUG: Print absolute paths
+    print(f"APP_DIR: {APP_DIR}")
+    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+    print(f"Uploads directory: {uploads_dir}")
+    print(f"Temp directory: {temp_dir}")
+    print(f"Static folder: {app.static_folder}")
     
-    # Créer les dossiers
+    # Create directories
     os.makedirs(uploads_dir, exist_ok=True)
     os.makedirs(temp_dir, exist_ok=True)
     
-    # Vérifier que les dossiers sont accessibles
-    print(f"Le dossier uploads existe: {os.path.exists(uploads_dir)}")
-    print(f"Le dossier temp existe: {os.path.exists(temp_dir)}")
+    # Verify directories exist
+    print(f"Uploads dir exists: {os.path.exists(uploads_dir)}")
+    print(f"Temp dir exists: {os.path.exists(temp_dir)}")
 
-# Créer les dossiers au démarrage
+# Create directories at startup
 ensure_dirs_exist()
 
-# Charger le modèle
-model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'models', 'best_cnn_model.keras')
-cnn_model = CNN_MODEL(model_path)
+# Load the model with absolute path
+model_path = os.path.join(PROJECT_ROOT, 'models', 'best_cnn_model.keras')
+print(f"Loading model from: {model_path}")
+print(f"Model exists: {os.path.exists(model_path)}")
 
-# Ajouter un contexte global pour les templates
+try:
+    cnn_model = CNN_MODEL(model_path)
+    print("Model loaded successfully")
+except Exception as e:
+    print(f"Error loading model: {e}")
+    # You might want to handle this more gracefully in production
+
+# Add favicon route to prevent 404 errors
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon or return 204 No Content if not found"""
+    favicon_path = os.path.join(app.static_folder, 'favicon.ico')
+    if os.path.exists(favicon_path):
+        return app.send_static_file('favicon.ico')
+    else:
+        # Return empty response to prevent 404 errors
+        from flask import Response
+        return Response(status=204)
+
 @app.context_processor
 def inject_now():
     return {'now': datetime.datetime.now()}
 
 def get_prediction_files():
-    """
-    Récupère les 10 dernières prédictions générées.
-    
-    Returns:
-        list: Liste des fichiers de prédiction, triés par date (les plus récents en premier)
-    """
-    # Chercher tous les fichiers de prédiction dans le dossier temp
-    temp_dir = os.path.join(app.root_path, app.config['TEMP_FOLDER'])
+    """Get the 10 most recent prediction files"""
+    temp_dir = app.config['TEMP_FOLDER']
     prediction_pattern = os.path.join(temp_dir, 'prediction_*.png')
     prediction_files = glob.glob(prediction_pattern)
     
-    # Extraire les timestamps des noms de fichiers
     timestamp_pattern = re.compile(r'prediction_(\d+)\.png')
     prediction_data = []
     
@@ -77,35 +99,20 @@ def get_prediction_files():
             timestamp = int(match.group(1))
             prediction_data.append((filename, timestamp, file_path))
     
-    # Trier par timestamp (descendant)
+    # Sort by timestamp (descending)
     prediction_data.sort(key=lambda x: x[1], reverse=True)
     
-    # Prendre les 10 premières prédictions
     return prediction_data[:10]
 
 def get_prediction_info(file_path):
-    """
-    Extrait les informations de prédiction à partir du nom de fichier.
-    
-    Args:
-        file_path (str): Chemin vers le fichier de prédiction
-        
-    Returns:
-        dict: Informations de prédiction
-    """
+    """Extract prediction info from filename"""
     filename = os.path.basename(file_path)
-    # Extraire le timestamp du nom de fichier
     timestamp_pattern = re.compile(r'prediction_(\d+)\.png')
     match = timestamp_pattern.match(filename)
     timestamp = int(match.group(1)) if match else 0
     
-    # Ouvrir l'image et essayer d'extraire le chiffre prédit
-    # Note: Nous ne pouvons pas facilement extraire les informations exactes de prédiction,
-    # donc nous générons des valeurs raisonnables pour la démonstration
-    digit = random.randint(0, 9)  # Générer un chiffre aléatoire pour la démonstration
-    confidence = random.uniform(80, 100)  # Générer une confiance aléatoire
-    
-    # Créer un objet datetime à partir du timestamp
+    digit = random.randint(0, 9)
+    confidence = random.uniform(80, 100)
     date = datetime.datetime.fromtimestamp(timestamp).strftime("%d/%m/%Y %H:%M:%S")
     
     return {
@@ -113,105 +120,87 @@ def get_prediction_info(file_path):
         'digit': digit,
         'confidence': confidence,
         'date': date,
-        'plot_path': os.path.join('temp', filename)
+        'plot_path': os.path.join('static', 'temp', filename)  # Use relative URL path
     }
 
 @app.route('/')
 def index():
-    """Page d'accueil avec interface de dessin et de drag & drop."""
-    # S'assurer que les dossiers existent avant le rendu
+    """Homepage with drawing interface and drag & drop"""
     ensure_dirs_exist()
     return render_template('index.html')
 
 @app.route('/history')
 def history():
-    """Page d'historique des prédictions."""
-    # Récupérer les fichiers de prédiction
+    """Prediction history page"""
     prediction_files = get_prediction_files()
-    
-    # Extraire les informations de prédiction
     predictions = [get_prediction_info(file_path) for _, _, file_path in prediction_files]
     
-    # Génération des séparateurs
-    # Choisir un séparateur de départ au hasard (1 à 5)
+    # Generate separators
     start_separator = random.randint(1, 5)
     separators = []
     
-    # Générer la séquence de séparateurs
-    for i in range(len(predictions) - 1):  # Besoin de (n-1) séparateurs pour n prédictions
-        separator_index = ((start_separator + i - 1) % 5) + 1  # Pour obtenir 1-5
+    for i in range(len(predictions) - 1):
+        separator_index = ((start_separator + i - 1) % 5) + 1
         separators.append(f"{separator_index}.svg")
     
     return render_template('history.html', predictions=predictions, separators=separators)
 
 @app.route('/predict', methods=['GET', 'POST'])
 def predict():
-    """Point d'API pour la prédiction à partir d'une image."""
-    # Si la méthode est GET, rediriger vers la page d'accueil
+    """Prediction endpoint"""
     if request.method == 'GET':
         return redirect(url_for('index'))
         
     result = None
     error = None
     
-    # S'assurer que les dossiers existent
     ensure_dirs_exist()
     
     try:
         if 'file' in request.files:
-            # Traitement d'une image téléchargée
+            # Handle uploaded image
             file = request.files['file']
             if file.filename != '':
-                # Sauvegarder temporairement l'image
                 filename = str(uuid.uuid4()) + os.path.splitext(file.filename)[1]
-                filepath = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], filename)
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 file.save(filepath)
                 
-                print(f"Image sauvegardée à: {filepath}")
-                print(f"L'image existe: {os.path.exists(filepath)}")
+                print(f"Image saved to: {filepath}")
+                print(f"Image exists: {os.path.exists(filepath)}")
                 
-                # Faire la prédiction
                 result = cnn_model.get_prediction_for_web(image_path=filepath)
+                result['original_image'] = os.path.join('static', 'uploads', filename)  # Use relative URL path
                 
-                # Ajouter le chemin de l'image originale pour l'afficher dans le résultat
-                result['original_image'] = 'uploads/' + filename
-                
-                # Vérifier les chemins des images
-                print(f"Chemin de l'image originale: {result['original_image']}")
-                print(f"Chemin du graphique: {result['plot_path']}")
+                print(f"Original image path: {result['original_image']}")
+                print(f"Plot path: {result['plot_path']}")
         
         elif 'image_data' in request.form:
-            # Traitement d'une image dessinée sur le canvas
+            # Handle drawn image
             image_data = request.form['image_data']
-            # Supprimer l'en-tête "data:image/png;base64,"
             if ',' in image_data:
                 image_data = image_data.split(',')[1]
             
-            # Décoder les données base64
             image_binary = base64.b64decode(image_data)
             
-            # Sauvegarder l'image originale pour l'afficher dans le résultat
             filename = str(uuid.uuid4()) + '.png'
-            filepath = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'], filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             with open(filepath, 'wb') as f:
                 f.write(image_binary)
             
-            print(f"Image dessinée sauvegardée à: {filepath}")
-            print(f"L'image existe: {os.path.exists(filepath)}")
+            print(f"Drawn image saved to: {filepath}")
+            print(f"Image exists: {os.path.exists(filepath)}")
             
-            # Faire la prédiction avec le chemin de l'image sauvegardée
             result = cnn_model.get_prediction_for_web(image_path=filepath)
-            result['original_image'] = 'uploads/' + filename
+            result['original_image'] = os.path.join('static', 'uploads', filename)  # Use relative URL path
             
-            # Vérifier les chemins des images
-            print(f"Chemin de l'image originale: {result['original_image']}")
-            print(f"Chemin du graphique: {result['plot_path']}")
+            print(f"Original image path: {result['original_image']}")
+            print(f"Plot path: {result['plot_path']}")
         
         else:
-            error = "Aucune image n'a été fournie. Veuillez dessiner ou télécharger une image."
+            error = "No image provided. Please draw or upload an image."
             
     except Exception as e:
-        error = f"Erreur lors de la prédiction: {str(e)}"
+        error = f"Prediction error: {str(e)}"
         print(error)
         import traceback
         traceback.print_exc()
@@ -219,41 +208,39 @@ def predict():
     if error:
         return jsonify({'error': error}), 400
     
-    # Si la prédiction s'est bien déroulée, renvoyer le résultat
     return render_template('result.html', result=result)
 
 @app.route('/api/predict', methods=['POST'])
 def api_predict():
-    """API JSON pour la prédiction."""
+    """JSON API for prediction"""
     try:
         if 'file' in request.files:
             file = request.files['file']
             if file.filename != '':
-                # Lire les données binaires directement
                 image_binary = file.read()
-                
-                # Faire la prédiction
                 results, _ = cnn_model.predict_from_image(image_data=image_binary)
                 return jsonify(results)
         
         elif 'image_data' in request.form:
             image_data = request.form['image_data']
-            # Supprimer l'en-tête "data:image/png;base64,"
             if ',' in image_data:
                 image_data = image_data.split(',')[1]
             
-            # Décoder les données base64
             image_binary = base64.b64decode(image_data)
-            
-            # Faire la prédiction
             results, _ = cnn_model.predict_from_image(image_data=image_binary)
             return jsonify(results)
             
-        return jsonify({'error': 'Aucune image fournie'}), 400
+        return jsonify({'error': 'No image provided'}), 400
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # S'assurer que les templates et les static sont bien configurés
-    app.run(debug=True, port=5000)
+    # Print configuration info for debugging
+    print(f"App root path: {app.root_path}")
+    print(f"Static folder: {app.static_folder}")
+    print(f"Template folder: {app.template_folder}")
+    print(f"Upload folder: {app.config['UPLOAD_FOLDER']}")
+    print(f"Temp folder: {app.config['TEMP_FOLDER']}")
+    
+    app.run(debug=True, port=5000, host='0.0.0.0')  # Bind to all interfaces for cloud deployment

@@ -1,5 +1,6 @@
 """
-Script de lancement pour l'application de reconnaissance de chiffres
+Enhanced launch script for the digit recognition application
+Fixed to handle cross-platform deployment and cloud services
 """
 import os
 import sys
@@ -7,42 +8,85 @@ import subprocess
 
 def main():
     """
-    Lance l'application Flask après avoir vérifié que les répertoires nécessaires existent
+    Launch Flask application with proper environment setup
     """
-    # Définir le chemin de l'application
-    app_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app')
+    # Get absolute paths
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    app_dir = os.path.join(project_root, 'app')
     app_script = os.path.join(app_dir, 'script.py')
     
-    # Vérifier que le script existe
+    print(f"Project root: {project_root}")
+    print(f"App directory: {app_dir}")
+    print(f"App script: {app_script}")
+    
+    # Verify that the script exists
     if not os.path.exists(app_script):
-        print(f"Erreur: Le script d'application n'existe pas à {app_script}")
+        print(f"Error: Application script does not exist at {app_script}")
         sys.exit(1)
     
-    # Créer les répertoires nécessaires s'ils n'existent pas
+    # Create necessary directories with absolute paths
     static_dir = os.path.join(app_dir, 'static')
     temp_dir = os.path.join(static_dir, 'temp')
     uploads_dir = os.path.join(static_dir, 'uploads')
+    css_dir = os.path.join(static_dir, 'css')
+    js_dir = os.path.join(static_dir, 'js')
     
-    # S'assurer que les répertoires existent
-    os.makedirs(static_dir, exist_ok=True)
-    os.makedirs(temp_dir, exist_ok=True)
-    os.makedirs(uploads_dir, exist_ok=True)
+    # Ensure all directories exist
+    directories_to_create = [static_dir, temp_dir, uploads_dir, css_dir, js_dir]
     
-    # Vérifier si les répertoires ont été créés avec succès
-    print(f"Le répertoire static existe: {os.path.exists(static_dir)}")
-    print(f"Le répertoire temp existe: {os.path.exists(temp_dir)}")
-    print(f"Le répertoire uploads existe: {os.path.exists(uploads_dir)}")
+    for directory in directories_to_create:
+        os.makedirs(directory, exist_ok=True)
+        print(f"Directory {directory} exists: {os.path.exists(directory)}")
     
-    # Lancer l'application Flask
-    print("Lancement de l'application Flask...")
+    # Verify static files exist
+    static_files_to_check = [
+        os.path.join(css_dir, 'styles.css'),
+        os.path.join(css_dir, 'history_styles.css'),
+        os.path.join(js_dir, 'draw.js'),
+        os.path.join(js_dir, 'upload.js')
+    ]
+    
+    print("\nStatic files check:")
+    for file_path in static_files_to_check:
+        exists = os.path.exists(file_path)
+        print(f"  {os.path.basename(file_path)}: {'✓' if exists else '✗'}")
+        if not exists:
+            print(f"    Missing: {file_path}")
+    
+    # Check if models directory exists
+    models_dir = os.path.join(project_root, 'models')
+    print(f"\nModels directory exists: {os.path.exists(models_dir)}")
+    if os.path.exists(models_dir):
+        model_files = os.listdir(models_dir)
+        print(f"Model files: {model_files}")
+    
+    # Set environment variables for the Flask app
+    env = os.environ.copy()
+    env['FLASK_APP'] = app_script
+    env['FLASK_ENV'] = 'production'  # Change to 'development' for debugging
+    env['PYTHONPATH'] = project_root
+    
+    print(f"\nLaunching Flask application...")
+    print(f"Working directory: {project_root}")
+    print(f"Python executable: {sys.executable}")
+    
     try:
-        # Changer le répertoire de travail
-        os.chdir(app_dir)
-        # Exécuter le script Flask
-        subprocess.run([sys.executable, 'script.py'])
+        # Stay in project root directory (don't change to app dir)
+        # This ensures relative imports work correctly
+        os.chdir(project_root)
+        
+        # Run the Flask application
+        result = subprocess.run([
+            sys.executable, 
+            os.path.join('app', 'script.py')
+        ], env=env, cwd=project_root)
+        
+        return result.returncode
+        
     except Exception as e:
-        print(f"Erreur lors du lancement de l'application: {e}")
-        sys.exit(1)
+        print(f"Error launching application: {e}")
+        return 1
 
 if __name__ == "__main__":
-    main()
+    exit_code = main()
+    sys.exit(exit_code)
