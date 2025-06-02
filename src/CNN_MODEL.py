@@ -177,13 +177,14 @@ class CNN_MODEL:
             plt.show()
             return results, None
 
-    def get_prediction_for_web(self, image_data=None, image_path=None):
+    def get_prediction_for_web(self, image_data=None, image_path=None, temp_folder=None):
         """
         Version adaptée pour l'application web qui renvoie des données formatées pour Flask.
         
         Args:
             image_data (bytes, optional): Données d'image en bytes
             image_path (str, optional): Chemin vers l'image
+            temp_folder (str, optional): Chemin vers le dossier temp
             
         Returns:
             dict: Résultats formatés pour l'affichage web
@@ -195,31 +196,18 @@ class CNN_MODEL:
         timestamp = int(time.time())
         output_filename = f"prediction_{timestamp}.png"
         
-        # Déterminer le chemin absolu du répertoire de travail courant
-        current_dir = os.getcwd()
-        print(f"Répertoire de travail actuel: {current_dir}")
-        
-        # Déterminer le chemin du dossier static/temp
-        if os.path.basename(current_dir) == 'app':
-            # Déjà dans le dossier app
-            temp_dir = os.path.join(current_dir, 'static', 'temp')
+        # Utiliser le dossier temp fourni ou déterminer automatiquement
+        if temp_folder and os.path.exists(temp_folder):
+            temp_dir = temp_folder
         else:
-            # Vérifier si nous sommes dans le répertoire parent
-            app_dir = os.path.join(current_dir, 'app')
-            if os.path.exists(app_dir):
-                temp_dir = os.path.join(app_dir, 'static', 'temp')
-            else:
-                # Fallback sur le répertoire courant
-                temp_dir = 'static/temp'
+            # Fallback: créer un dossier temp dans le répertoire courant
+            temp_dir = os.path.join(os.getcwd(), 'temp')
+            os.makedirs(temp_dir, exist_ok=True)
         
-        # Créer le dossier temp s'il n'existe pas
-        os.makedirs(temp_dir, exist_ok=True)
         output_path = os.path.join(temp_dir, output_filename)
         
-        # DEBUG: Afficher les chemins
-        print(f"Chemin du dossier temp: {temp_dir}")
-        print(f"Chemin complet du fichier de sortie: {output_path}")
-        print(f"Dossier temp existe: {os.path.exists(temp_dir)}")
+        print(f"Dossier temp utilisé: {temp_dir}")
+        print(f"Fichier de sortie: {output_path}")
         
         # Configurer la figure pour l'affichage
         plt.figure(figsize=(12, 6))
