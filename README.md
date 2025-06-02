@@ -43,6 +43,7 @@ CNN/
 1. Clonez ce dépôt :
 ```bash
 git clone <repository-url>
+cd CNN
 ```
 
 2. Installez les dépendances :
