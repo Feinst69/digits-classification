@@ -4,39 +4,71 @@
 
 {% block content %}
 <div class="app-container">
-    <section class="drawing-section">
-        <h2>Dessiner un chiffre</h2>
-        <div class="canvas-container">
-            <canvas id="canvas" width="280" height="280"></canvas>
+    <!-- Main prediction area -->
+    <div class="prediction-area" id="prediction-area">
+        <!-- Left side: Resized image -->
+        <div class="resized-image-container" id="resized-image-container">
+            <h3>Image redimensionnée (28x28)</h3>
+            <div class="image-placeholder" id="resized-image-placeholder">
+                <p>L'image redimensionnée apparaîtra ici</p>
+            </div>
+            <canvas id="resized-canvas" width="280" height="280" style="display: none;"></canvas>
         </div>
-        <div class="drawing-tools">
-            <button id="clear-canvas" class="danger">Effacer</button>
-            <button id="predict-drawing" class="success">Analyser</button>
+        
+        <!-- Center: Drawing canvas -->
+        <div class="canvas-section">
+            <h2>Dessiner un chiffre</h2>
+            <div class="canvas-container">
+                <canvas id="canvas" width="280" height="280"></canvas>
+            </div>
+            <div class="drawing-tools">
+                <button id="clear-canvas" class="danger">Effacer</button>
+                <!-- Auto-prediction indicator -->
+                <div id="auto-predict-indicator" class="auto-predict-indicator" style="display: none;">
+                    <span class="indicator-text">Prédiction automatique...</span>
+                    <div class="countdown-bar"></div>
+                </div>
+            </div>
+            <div id="loader" class="loader"></div>
+            
+            <!-- Upload section -->
+            <div class="upload-section-compact">
+                <h3>Ou téléchargez une image</h3>
+                <div id="dropzone" class="dropzone-compact">
+                    <p>Glissez-déposez une image ici</p>
+                </div>
+                <input type="file" id="file-input" class="file-input" accept="image/*">
+            </div>
         </div>
-        <div id="loader" class="loader"></div>
-        <form id="drawing-form" action="{{ url_for('predict') }}" method="post">
-            <input type="hidden" id="image-data" name="image_data">
-        </form>
-    </section>
+        
+        <!-- Right side: Prediction results -->
+        <div class="prediction-results-container" id="prediction-results-container">
+            <h3>Prédictions</h3>
+            <div class="prediction-placeholder" id="prediction-placeholder">
+                <p>Les résultats de prédiction apparaîtront ici</p>
+            </div>
+            <div id="prediction-results" style="display: none;">
+                <div class="prediction-result">
+                    <h4>Chiffre détecté :</h4>
+                    <div class="prediction-value" id="predicted-digit">-</div>
+                    <div class="confidence" id="confidence">Confiance : -%</div>
+                </div>
+                <div class="probabilities-chart" id="probabilities-chart">
+                    <!-- Chart will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
     
-    <section class="upload-section">
-        <h2>Ou téléchargez une image</h2>
-        <div id="dropzone" class="dropzone">
-            <p>Glissez-déposez une image ici ou cliquez pour sélectionner un fichier</p>
-        </div>
-        <div id="loader-upload" class="loader"></div>
-        <form id="upload-form" action="{{ url_for('predict') }}" method="post" enctype="multipart/form-data">
-            <input type="file" id="file-input" name="file" class="file-input" accept="image/*">
-        </form>
-    </section>
-    
+    <!-- Instructions (moved below) -->
     <section class="instructions">
         <h2>Comment ça marche ?</h2>
         <p>Deux options s'offrent à vous pour tester le modèle de reconnaissance de chiffres :</p>
         <ol>
-            <li>Dessinez un chiffre dans la zone de dessin ci-dessus</li>
-            <li>Ou glissez-déposez une image de chiffre manuscrit</li>
+            <li>Dessinez un chiffre dans la zone de dessin ci-dessus - <strong>la prédiction se fait automatiquement</strong> quand vous arrêtez de dessiner</li>
+            <li>Ou glissez-déposez une image de chiffre manuscrit pour une analyse instantanée</li>
         </ol>
+        <p>Les résultats s'affichent automatiquement en temps réel sur cette page, sans besoin de cliquer sur un bouton !</p>
     </section>
     
     <div class="history-link-container">
@@ -46,6 +78,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/draw.js') }}"></script>
-<script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+<script src="{{ url_for('static', filename='js/draw-ajax.js') }}"></script>
+<script src="{{ url_for('static', filename='js/upload-ajax.js') }}"></script>
+<script src="{{ url_for('static', filename='js/prediction-display.js') }}"></script>
 {% endblock %}

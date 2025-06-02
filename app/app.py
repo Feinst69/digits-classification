@@ -171,6 +171,59 @@ def api_predict():
         return jsonify({'error': 'Aucune image fournie'}), 400
         
     except Exception as e:
+        print(f"Erreur dans api_predict: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/predict-with-image', methods=['POST'])
+def api_predict_with_image():
+    """API endpoint qui retourne la prédiction avec l'image redimensionnée en base64"""
+    try:
+        processed_image = None
+        
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename != '':
+                image_binary = file.read()
+                results, processed_image = cnn_model.predict_from_image(image_data=image_binary)
+        
+        elif 'image_data' in request.form:
+            image_data = request.form['image_data']
+            if ',' in image_data:
+                image_data = image_data.split(',')[1]
+            
+            image_binary = base64.b64decode(image_data)
+            results, processed_image = cnn_model.predict_from_image(image_data=image_binary)
+        else:
+            return jsonify({'error': 'Aucune image fournie'}), 400
+        
+        # Convertir l'image redimensionnée en base64 pour l'affichage
+        if processed_image is not None:
+            # Convertir l'image numpy en PIL Image
+            from PIL import Image as PILImage
+            import io
+            
+            # L'image est de forme (1, 28, 28, 1), on la redimensionne pour l'affichage
+            img_array = processed_image[0, :, :, 0]  # Enlever les dimensions batch et channel
+            img_array = (img_array * 255).astype('uint8')  # Convertir en 0-255
+            
+            # Créer une image PIL
+            pil_img = PILImage.fromarray(img_array, mode='L')
+            
+            # Convertir en base64
+            buffer = io.BytesIO()
+            pil_img.save(buffer, format='PNG')
+            img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            results['resized_image_base64'] = f"data:image/png;base64,{img_base64}"
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        print(f"Erreur dans api_predict_with_image: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/debug')

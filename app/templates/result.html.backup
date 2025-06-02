@@ -45,9 +45,5 @@
             </tbody>
         </table>
     </div>
-    
-    <div style="text-align: center; margin-top: 20px;">
-        <p><em>Note: Cette page est maintenant obsolète. Utilisez la <a href="{{ url_for('index') }}">page principale</a> pour une expérience améliorée avec prédictions en temps réel.</em></p>
-    </div>
 </div>
 {% endblock %}
