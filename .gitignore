@@ -5,3 +5,5 @@
 # Julien
 .python-version
 dump
+__pycache__
+*.pyc
