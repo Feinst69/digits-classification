@@ -15,11 +15,32 @@ import io
 # Ajouter le répertoire parent au chemin d'importation
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Importer la classe CNN_MODEL
 from src.CNN_MODEL import CNN_MODEL
 
 # Définir le bon chemin pour les fichiers statiques
-app = Flask(__name__, static_folder='static', static_url_path='/static')
+if os.path.exists('/app/static'):
+    app = Flask(__name__, static_folder='/app/static', static_url_path='/app/static')
+    print("w/app")
+elif os.path.exists('/static'):
+    app = Flask(__name__, static_folder='static', static_url_path='/static')
+    print("w/o app")
+    print(f"Static folder path: {app.static_folder}")
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+else:
+    app = Flask(__name__, static_folder='static', static_url_path='/static')
+    print("NOOOOOO EXISTTTTT")
+    print(f"Static folder path: {app.static_folder}")
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
+
 
 # Configurer les dossiers pour les fichiers statiques et les uploads
 app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
@@ -46,7 +67,8 @@ def ensure_dirs_exist():
 ensure_dirs_exist()
 
 # Charger le modèle
-model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'models', 'best_cnn_model.keras')
+model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app', 'models', 'best_cnn_model.keras')
+print("XXXXXXXXXXXXxx", model_path)
 cnn_model = CNN_MODEL(model_path)
 
 # Ajouter un contexte global pour les templates

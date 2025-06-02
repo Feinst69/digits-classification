@@ -10,7 +10,14 @@ def main():
     Lance l'application Flask après avoir vérifié que les répertoires nécessaires existent
     """
     # Définir le chemin de l'application
-    app_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app')
+    root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)))
+    print("root_dir", root_dir)
+    print("root_dir", root_dir)
+    print("root_dir", root_dir)
+    print("root_dir", root_dir)
+    print("root_dir", root_dir)
+    
+    app_dir = os.path.join(root_dir, 'app')
     app_script = os.path.join(app_dir, 'script.py')
     
     # Vérifier que le script existe
@@ -37,9 +44,16 @@ def main():
     print("Lancement de l'application Flask...")
     try:
         # Changer le répertoire de travail
-        os.chdir(app_dir)
+        # os.chdir(app_dir) 
         # Exécuter le script Flask
-        subprocess.run([sys.executable, 'script.py'])
+        # subprocess.run([sys.executable, 'app', 'script.py'])
+        print(app_script)
+        print(app_script)
+        print(app_script)
+        print(app_script)
+        print(app_script)
+        subprocess.run([sys.executable, app_script])
+        
     except Exception as e:
         print(f"Erreur lors du lancement de l'application: {e}")
         sys.exit(1)
