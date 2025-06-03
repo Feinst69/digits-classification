@@ -12,3 +12,6 @@ __pycache__/
 
 # Ignore all .pyc files
 *.pyc
+
+
+best_mnist_model.h5
