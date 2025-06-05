@@ -1,0 +1,47 @@
+/* Lien vers l'historique */
+.history-link-container {
+    text-align: center;
+    margin-top: 1.5rem;
+}
+
+.history-link {
+    display: inline-block;
+    background-color: #3498db;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.history-link:hover {
+    background-color: #2980b9;
+}
+
+/* Styles spécifiques pour la page d'historique */
+.history-item {
+    display: flex;
+    justify-content: center;
+    padding: 1rem 0;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+}
+
+.history-image-full {
+    max-width: 90%;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.separator {
+    display: flex;
+    justify-content: center;
+    margin: 0.5rem 0;
+    width: 100%;
+}
+
+.separator-image {
+    width: 45%;
+    height: 6px;
+}

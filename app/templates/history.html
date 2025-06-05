@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Historique des Prédictions{% endblock %}
+
+{% block content %}
+<div class="history-section">
+    <div class="results-header">
+        <h2>Historique des Prédictions</h2>
+        <a href="{{ url_for('index') }}" class="restart-button">Retour</a>
+    </div>
+    
+    {% if predictions %}
+        <div class="history-list">
+        {% for prediction in predictions %}
+            <div class="history-item">
+                <img src="{{ url_for('static', filename=prediction.plot_path) }}" alt="Prédiction" class="history-image-full">
+            </div>
+            
+            {% if not loop.last %}
+                <div class="separator">
+                    <img src="{{ url_for('static', filename='ressources/' + separators[loop.index0]) }}" alt="Séparateur" class="separator-image" width="45%">
+                </div>
+            {% endif %}
+        {% endfor %}
+        </div>
+    {% else %}
+        <p class="no-history">Aucune prédiction n'a encore été réalisée.</p>
+    {% endif %}
+</div>
+{% endblock %}
