@@ -4,81 +4,336 @@
 
 {% block content %}
 <div class="app-container">
-    <!-- Main prediction area -->
-    <div class="prediction-area" id="prediction-area">
-        <!-- Left side: Resized image -->
-        <div class="resized-image-container" id="resized-image-container">
-            <h3>Image redimensionnée (28x28)</h3>
-            <div class="image-placeholder" id="resized-image-placeholder">
-                <p>L'image redimensionnée apparaîtra ici</p>
-            </div>
-            <canvas id="resized-canvas" width="280" height="280" style="display: none;"></canvas>
-        </div>
-        
-        <!-- Center: Drawing canvas -->
-        <div class="canvas-section">
-            <h2>Dessiner un chiffre</h2>
-            <div class="canvas-container">
-                <canvas id="canvas" width="280" height="280"></canvas>
-            </div>
-            <div class="drawing-tools">
-                <button id="clear-canvas" class="danger">Effacer</button>
-                <!-- Auto-prediction indicator -->
-                <div id="auto-predict-indicator" class="auto-predict-indicator" style="display: none;">
-                    <span class="indicator-text">Prédiction automatique...</span>
-                    <div class="countdown-bar"></div>
-                </div>
-            </div>
-            <div id="loader" class="loader"></div>
-            
-            <!-- Upload section -->
-            <div class="upload-section-compact">
-                <h3>Ou téléchargez une image</h3>
-                <div id="dropzone" class="dropzone-compact">
-                    <p>Glissez-déposez une image ici</p>
-                </div>
-                <input type="file" id="file-input" class="file-input" accept="image/*">
-            </div>
-        </div>
-        
-        <!-- Right side: Prediction results -->
-        <div class="prediction-results-container" id="prediction-results-container">
-            <h3>Prédictions</h3>
-            <div class="prediction-placeholder" id="prediction-placeholder">
-                <p>Les résultats de prédiction apparaîtront ici</p>
-            </div>
-            <div id="prediction-results" style="display: none;">
-                <div class="prediction-result">
-                    <h4>Chiffre détecté :</h4>
-                    <div class="prediction-value" id="predicted-digit">-</div>
-                    <div class="confidence" id="confidence">Confiance : -%</div>
-                </div>
-                <div class="probabilities-chart" id="probabilities-chart">
-                    <!-- Chart will be inserted here -->
-                </div>
-            </div>
-        </div>
+  <!-- Main prediction area -->
+  <div class="prediction-area" id="prediction-area">
+    <!-- Left side: Resized image -->
+    <div class="resized-image-container" id="resized-image-container">
+      <h3>Image redimensionnée (28x28)</h3>
+      <div class="image-placeholder" id="resized-image-placeholder">
+        <p>L'image redimensionnée apparaîtra ici</p>
+      </div>
+      <canvas id="resized-canvas" width="280" height="280" style="display: none;"></canvas>
     </div>
-    
-    <!-- Instructions (moved below) -->
-    <section class="instructions">
-        <h2>Comment ça marche ?</h2>
-        <p>Deux options s'offrent à vous pour tester le modèle de reconnaissance de chiffres :</p>
-        <ol>
-            <li>Dessinez un chiffre dans la zone de dessin ci-dessus - <strong>la prédiction se fait automatiquement</strong> quand vous arrêtez de dessiner</li>
-            <li>Ou glissez-déposez une image de chiffre manuscrit pour une analyse instantanée</li>
-        </ol>
-        <p>Les résultats s'affichent automatiquement en temps réel sur cette page, sans besoin de cliquer sur un bouton !</p>
-    </section>
-    
-    <div class="history-link-container">
-        <a href="{{ url_for('history') }}" class="history-link">Voir l'historique des prédictions</a>
+
+    <!-- Center: Drawing canvas -->
+    <div class="canvas-section">
+      <h2>Dessiner un chiffre</h2>
+      <div class="canvas-container">
+        <canvas id="canvas" width="280" height="280"></canvas>
+      </div>
+      <div class="drawing-tools">
+        <button id="clear-canvas" class="danger">Effacer</button>
+        <!-- Toggle pour activer les filtres -->
+        <label class="filter-toggle">
+          <input type="checkbox" id="show-filters-checkbox" checked>
+          <span class="toggle-text">Afficher les filtres CNN</span>
+        </label>
+        <!-- Auto-prediction indicator -->
+        <div id="auto-predict-indicator" class="auto-predict-indicator" style="display: none;">
+          <span class="indicator-text">Prédiction automatique...</span>
+          <div class="countdown-bar"></div>
+        </div>
+      </div>
+      <div id="loader" class="loader"></div>
+
+      <!-- Upload section -->
+      <div class="upload-section-compact">
+        <h3>Ou téléchargez une image</h3>
+        <div id="dropzone" class="dropzone-compact">
+          <p>Glissez-déposez une image ici</p>
+        </div>
+        <input type="file" id="file-input" class="file-input" accept="image/*">
+      </div>
     </div>
+
+    <!-- Right side: Prediction results -->
+    <div class="prediction-results-container" id="prediction-results-container">
+      <h3>Prédictions</h3>
+      <div class="prediction-placeholder" id="prediction-placeholder">
+        <p>Les résultats de prédiction apparaîtront ici</p>
+      </div>
+      <div id="prediction-results" style="display: none;">
+        <div class="prediction-result">
+          <h4>Chiffre détecté :</h4>
+          <div class="prediction-value" id="predicted-digit">-</div>
+          <div class="confidence" id="confidence">Confiance : -%</div>
+        </div>
+        <div class="probabilities-chart" id="probabilities-chart">
+          <!-- Chart will be inserted here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CNN Filter Visualization Section -->
+  <div class="filters-section" id="filters-section" style="display: none;">
+    <h2>Comment le réseau "voit" votre chiffre</h2>
+    <p class="filters-description">
+      Voici les cartes de caractéristiques (feature maps) des couches convolutionnelles.
+      Chaque filtre détecte des motifs spécifiques comme les contours, les courbes ou les textures.
+    </p>
+
+    <div class="filters-container" id="filters-container">
+      <div class="filters-placeholder" id="filters-placeholder">
+        <div class="placeholder-icon">🔍</div>
+        <p>Les filtres CNN apparaîtront ici après une prédiction</p>
+      </div>
+
+      <div class="filters-grid" id="filters-grid" style="display: none;">
+        <!-- Les filtres seront insérés ici dynamiquement -->
+      </div>
+    </div>
+
+    <div class="filters-legend">
+      <h4>Légende :</h4>
+      <ul>
+        <li><strong>L1 F#</strong> - Couche 1, Filtre # (détecte contours basiques)</li>
+        <li><strong>L2 F#</strong> - Couche 2, Filtre # (détecte formes intermédiaires)</li>
+        <li><strong>L3 F#</strong> - Couche 3, Filtre # (détecte motifs complexes)</li>
+      </ul>
+      <p class="legend-note">
+        Plus la zone est claire/colorée, plus le filtre est activé par cette partie de l'image.
+      </p>
+    </div>
+  </div>
+
+  <!-- Instructions (moved below) -->
+  <section class="instructions">
+    <h2>Comment ça marche ?</h2>
+    <p>Deux options s'offrent à vous pour tester le modèle de reconnaissance de chiffres :</p>
+    <ol>
+      <li>Dessinez un chiffre dans la zone de dessin ci-dessus - <strong>la prédiction se fait automatiquement</strong>
+        quand vous arrêtez de dessiner</li>
+      <li>Ou glissez-déposez une image de chiffre manuscrit pour une analyse instantanée</li>
+    </ol>
+    <p>Les résultats s'affichent automatiquement en temps réel sur cette page, sans besoin de cliquer sur un bouton !
+    </p>
+    <p><strong>Nouveau :</strong> Activez l'option "Afficher les filtres CNN" pour voir comment le réseau neuronal
+      analyse votre chiffre couche par couche.</p>
+  </section>
+
+  <div class="history-link-container">
+    <a href="{{ url_for('history') }}" class="history-link">Voir l'historique des prédictions</a>
+  </div>
 </div>
+
+<style>
+  /* Styles pour la section des filtres */
+  .filters-section {
+    margin: 40px 0;
+    padding: 30px;
+    background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+    border-radius: 15px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  }
+
+  .filters-section h2 {
+    color: #495057;
+    text-align: center;
+    margin-bottom: 15px;
+    font-weight: 600;
+  }
+
+  .filters-description {
+    text-align: center;
+    color: #6c757d;
+    margin-bottom: 25px;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+  }
+
+  .filters-container {
+    min-height: 200px;
+    position: relative;
+  }
+
+  .filters-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: #adb5bd;
+    font-style: italic;
+  }
+
+  .placeholder-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+    opacity: 0.7;
+  }
+
+  .filters-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .filter-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 15px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+  }
+
+  .filter-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    border-color: #007bff;
+  }
+
+  .filter-image {
+    width: 120px;
+    height: 120px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #dee2e6;
+  }
+
+  .filter-title {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 5px;
+    font-size: 14px;
+  }
+
+  .filter-info {
+    font-size: 12px;
+    color: #6c757d;
+    text-align: center;
+  }
+
+  .filters-legend {
+    margin-top: 30px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 10px;
+    border-left: 4px solid #007bff;
+  }
+
+  .filters-legend h4 {
+    margin-bottom: 15px;
+    color: #495057;
+  }
+
+  .filters-legend ul {
+    margin-bottom: 15px;
+    padding-left: 20px;
+  }
+
+  .filters-legend li {
+    margin-bottom: 8px;
+    color: #6c757d;
+  }
+
+  .legend-note {
+    margin: 0;
+    font-style: italic;
+    color: #6c757d;
+    font-size: 14px;
+  }
+
+  /* Toggle pour les filtres */
+  .filter-toggle {
+    display: flex;
+    align-items: center;
+    margin-left: 15px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .filter-toggle input[type="checkbox"] {
+    margin-right: 8px;
+    transform: scale(1.2);
+  }
+
+  .toggle-text {
+    font-size: 14px;
+    color: #495057;
+    font-weight: 500;
+  }
+
+  .filter-toggle:hover .toggle-text {
+    color: #007bff;
+  }
+
+  /* Animation d'entrée pour les filtres */
+  .filter-item {
+    animation: filterFadeIn 0.6s ease-out;
+  }
+
+  @keyframes filterFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.9);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* Responsive design pour les filtres */
+  @media (max-width: 768px) {
+    .filters-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+    }
+
+    .filter-image {
+      width: 100px;
+      height: 100px;
+    }
+
+    .filters-section {
+      padding: 20px;
+      margin: 20px 0;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .filters-grid {
+      grid-template-columns: 1fr;
+      gap: 15px;
+    }
+  }
+
+  /* Amélioration des outils de dessin */
+  .drawing-tools {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 480px) {
+    .drawing-tools {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .filter-toggle {
+      margin-left: 0;
+    }
+  }
+</style>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/draw-ajax.js') }}"></script>
 <script src="{{ url_for('static', filename='js/upload-ajax.js') }}"></script>
 <script src="{{ url_for('static', filename='js/prediction-display.js') }}"></script>
+<script src="{{ url_for('static', filename='js/filter-visualization.js') }}"></script>
 {% endblock %}

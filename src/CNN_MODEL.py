@@ -5,13 +5,14 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model, Model
 from PIL import Image
 import os
 import io
 import time
 import threading
 from contextlib import contextmanager
+import base64
 
 class CNN_MODEL:
     def __init__(self, model_path='models/best_cnn_model.keras'):
@@ -24,9 +25,14 @@ class CNN_MODEL:
         try:
             self.model = load_model(model_path)
             print(f"Modèle chargé depuis: {model_path}")
+
+            # Créer des modèles pour extraire les feature maps des couches intermédiaires
+            self._create_feature_extractors()
+
         except Exception as e:
             print(f"Erreur lors du chargement du modèle: {e}")
             self.model = None
+            self.feature_extractors = {}
 
         # Thread lock pour les opérations matplotlib
         self._plot_lock = threading.Lock()
@@ -34,12 +40,36 @@ class CNN_MODEL:
         # Configuration matplotlib pour éviter les problèmes de threading
         plt.ioff()  # Turn off interactive mode
 
+    def _create_feature_extractors(self):
+        """Créer des extracteurs de features pour visualiser les couches intermédiaires"""
+        self.feature_extractors = {}
+
+        if self.model is None:
+            return
+
+        # Identifier les couches convolutionnelles
+        conv_layers = []
+        for i, layer in enumerate(self.model.layers):
+            if 'conv' in layer.name.lower() or isinstance(layer, tf.keras.layers.Conv2D):
+                conv_layers.append((i, layer.name, layer))
+
+        print(f"Couches convolutionnelles trouvées: {[name for _, name, _ in conv_layers]}")
+
+        # Créer des extracteurs pour les premières couches (les plus interprétables)
+        for i, (layer_idx, layer_name, layer) in enumerate(conv_layers[:3]):  # Prendre les 3 premières couches conv
+            try:
+                extractor = Model(inputs=self.model.input, outputs=layer.output)
+                self.feature_extractors[f"conv_{i+1}_{layer_name}"] = extractor
+                print(f"✓ Extracteur créé pour: {layer_name}")
+            except Exception as e:
+                print(f"✗ Erreur création extracteur pour {layer_name}: {e}")
+
     @contextmanager
     def _safe_plotting(self):
         """Context manager pour les opérations matplotlib thread-safe"""
         with self._plot_lock:
             # Créer une nouvelle figure avec des paramètres explicites
-            fig = plt.figure(figsize=(12, 6))
+            fig = plt.figure(figsize=(15, 10))
             try:
                 yield fig
             finally:
@@ -91,6 +121,69 @@ class CNN_MODEL:
 
         return img_array, original_size
 
+    def extract_feature_maps(self, processed_image):
+        """
+        Extraire les feature maps des couches convolutionnelles.
+
+        Args:
+            processed_image: Image préparée pour le modèle
+
+        Returns:
+            dict: Feature maps pour chaque couche
+        """
+        feature_maps = {}
+
+        for layer_name, extractor in self.feature_extractors.items():
+            try:
+                features = extractor.predict(processed_image, verbose=0)
+                feature_maps[layer_name] = features
+                print(f"Feature maps extraites pour {layer_name}: shape {features.shape}")
+            except Exception as e:
+                print(f"Erreur extraction features {layer_name}: {e}")
+
+        return feature_maps
+
+    def select_representative_filters(self, feature_maps, n_filters=9):
+        """
+        Sélectionner les filtres les plus représentatifs pour l'affichage.
+
+        Args:
+            feature_maps (dict): Feature maps de toutes les couches
+            n_filters (int): Nombre de filtres à sélectionner
+
+        Returns:
+            list: Liste des (layer_name, filter_index, feature_map) sélectionnés
+        """
+        selected_filters = []
+
+        for layer_name, features in feature_maps.items():
+            if len(features.shape) == 4:  # (batch, height, width, channels)
+                n_channels = features.shape[-1]
+
+                # Calculer la variance de chaque filtre pour trouver les plus actifs
+                filter_variances = []
+                for i in range(n_channels):
+                    variance = np.var(features[0, :, :, i])
+                    filter_variances.append((variance, i, features[0, :, :, i]))
+
+                # Trier par variance décroissante
+                filter_variances.sort(reverse=True, key=lambda x: x[0])
+
+                # Prendre les filtres les plus actifs
+                filters_per_layer = min(3, len(filter_variances))  # Max 3 par couche
+                for j in range(filters_per_layer):
+                    if len(selected_filters) < n_filters:
+                        variance, filter_idx, filter_map = filter_variances[j]
+                        selected_filters.append({
+                            'layer_name': layer_name,
+                            'filter_index': filter_idx,
+                            'feature_map': filter_map,
+                            'variance': variance,
+                            'title': f"{layer_name.split('_')[1]} F{filter_idx}"
+                        })
+
+        return selected_filters[:n_filters]
+
     def predict(self, processed_image):
         """
         Réalise la prédiction à partir d'une image préparée.
@@ -104,7 +197,7 @@ class CNN_MODEL:
         if self.model is None:
             raise ValueError("Le modèle n'a pas été chargé correctement.")
 
-        return self.model.predict(processed_image)
+        return self.model.predict(processed_image, verbose=0)
 
     def predict_from_image(self, image_path=None, image_data=None):
         """
@@ -133,81 +226,80 @@ class CNN_MODEL:
 
         return results, processed_image
 
-    def predict_and_visualize(self, image_path=None, image_data=None, save_plot=False, output_path=None):
+    def predict_with_feature_maps(self, image_path=None, image_data=None):
         """
-        Fait la prédiction et visualise les résultats de manière thread-safe.
+        Prédiction avec extraction des feature maps pour visualisation.
 
         Args:
             image_path (str, optional): Chemin vers l'image
             image_data (bytes, optional): Données d'image en bytes
-            save_plot (bool): Si True, sauvegarde le graphique au lieu de l'afficher
-            output_path (str, optional): Chemin pour sauvegarder le graphique
 
         Returns:
-            dict: Résultats de la prédiction
-            str: Chemin vers le graphique sauvegardé (si save_plot=True)
+            tuple: (résultats prédiction, image processed, feature maps sélectionnées)
         """
+        # Faire la prédiction normale
         results, processed_image = self.predict_from_image(image_path, image_data)
 
-        # Charger l'image originale
-        if image_path and os.path.exists(image_path):
-            img_original = Image.open(image_path)
-        elif image_data:
-            img_original = Image.open(io.BytesIO(image_data))
-        else:
-            raise ValueError("Veuillez fournir soit un chemin d'image valide, soit des données d'image.")
+        # Extraire les feature maps
+        feature_maps = self.extract_feature_maps(processed_image)
 
-        # Utiliser le context manager pour la création du plot
-        with self._safe_plotting() as fig:
-            # Afficher l'image originale
-            ax1 = fig.add_subplot(1, 3, 1)
-            ax1.set_title(f"Image originale\nTaille: {results['original_size'][0]}x{results['original_size'][1]}")
-            ax1.imshow(img_original, cmap='gray' if img_original.mode == 'L' else None)
-            ax1.axis('off')
+        # Sélectionner les filtres les plus représentatifs
+        selected_filters = self.select_representative_filters(feature_maps, n_filters=9)
 
-            # Afficher l'image préparée (28x28)
-            ax2 = fig.add_subplot(1, 3, 2)
-            ax2.set_title("Image redimensionnée (28x28)")
-            ax2.imshow(processed_image[0, :, :, 0], cmap='gray')
-            ax2.axis('off')
+        return results, processed_image, selected_filters
 
-            # Afficher les résultats
-            ax3 = fig.add_subplot(1, 3, 3)
-            ax3.set_title("Prédictions")
-            ax3.bar(range(10), results['probabilities'])
-            ax3.set_xticks(range(10))
-            ax3.set_xlabel("Chiffre")
-            ax3.set_ylabel("Probabilité (%)")
-
-            # Afficher le résultat principal
-            fig.suptitle(f"Prédiction: {results['predicted_digit']} (Confiance: {results['confidence']:.2f}%)", fontsize=16)
-            fig.tight_layout()
-
-            if save_plot:
-                if output_path is None:
-                    output_path = "predictions/prediction_result.png"
-                    # Créer le dossier s'il n'existe pas
-                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-                # S'assurer que le dossier parent existe
-                os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-
-                try:
-                    fig.savefig(output_path, dpi=100, bbox_inches='tight')
-                    print(f"Graphique sauvegardé dans: {output_path}")
-                except Exception as e:
-                    print(f"Erreur lors de la sauvegarde du graphique: {e}")
-                    raise
-
-                return results, output_path
-            else:
-                # En mode non-interactif, on ne peut pas utiliser plt.show()
-                print("Mode non-interactif: utilisez save_plot=True pour sauvegarder le graphique")
-                return results, None
-
-    def get_prediction_for_web(self, image_data=None, image_path=None, temp_folder=None):
+    def create_filter_visualization(self, selected_filters):
         """
-        Version thread-safe adaptée pour l'application web qui renvoie des données formatées pour Flask.
+        Créer une visualisation des filtres sous forme d'images base64.
+
+        Args:
+            selected_filters: Liste des filtres sélectionnés
+
+        Returns:
+            list: Liste des images en base64
+        """
+        filter_images = []
+
+        for filter_info in selected_filters:
+            try:
+                # Créer une petite figure pour chaque filtre
+                fig, ax = plt.subplots(1, 1, figsize=(2, 2))
+
+                # Normaliser le feature map pour l'affichage
+                feature_map = filter_info['feature_map']
+                normalized_map = (feature_map - feature_map.min()) / (feature_map.max() - feature_map.min() + 1e-8)
+
+                # Afficher avec une colormap
+                im = ax.imshow(normalized_map, cmap='viridis', interpolation='nearest')
+                ax.set_title(filter_info['title'], fontsize=8, pad=2)
+                ax.axis('off')
+
+                # Sauvegarder en base64
+                buffer = io.BytesIO()
+                plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight',
+                           facecolor='white', edgecolor='none', pad_inches=0.1)
+                buffer.seek(0)
+
+                img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                filter_images.append({
+                    'image': f"data:image/png;base64,{img_base64}",
+                    'title': filter_info['title'],
+                    'layer': filter_info['layer_name'],
+                    'variance': float(filter_info['variance'])
+                })
+
+                plt.close(fig)
+                buffer.close()
+
+            except Exception as e:
+                print(f"Erreur création visualisation filtre: {e}")
+                continue
+
+        return filter_images
+
+    def get_prediction_for_web_with_filters(self, image_data=None, image_path=None, temp_folder=None):
+        """
+        Version complète pour l'application web avec visualisation des filtres.
 
         Args:
             image_data (bytes, optional): Données d'image en bytes
@@ -215,11 +307,13 @@ class CNN_MODEL:
             temp_folder (str, optional): Chemin vers le dossier temp
 
         Returns:
-            dict: Résultats formatés pour l'affichage web
+            dict: Résultats formatés pour l'affichage web avec filtres
         """
         try:
-            # Faire la prédiction
-            results, processed_image = self.predict_from_image(image_path=image_path, image_data=image_data)
+            # Faire la prédiction avec feature maps
+            results, processed_image, selected_filters = self.predict_with_feature_maps(
+                image_path=image_path, image_data=image_data
+            )
 
             # Générer un nom unique pour l'image de résultat
             timestamp = int(time.time())
@@ -290,6 +384,9 @@ class CNN_MODEL:
                     plot_path = 'temp/default.png'
                     raise
 
+            # Créer les visualisations des filtres
+            filter_visualizations = self.create_filter_visualization(selected_filters)
+
             # Sauvegarder les métadonnées pour l'historique (en dehors du context manager)
             try:
                 metadata_path = output_path.replace('.png', '_metadata.json')
@@ -299,7 +396,8 @@ class CNN_MODEL:
                     'confidence': results['confidence'],
                     'probabilities': results['probabilities'],
                     'timestamp': timestamp,
-                    'original_size': results['original_size']
+                    'original_size': results['original_size'],
+                    'filters_count': len(filter_visualizations)
                 }
 
                 with open(metadata_path, 'w') as f:
@@ -316,13 +414,20 @@ class CNN_MODEL:
                     {'digit': i, 'probability': prob}
                     for i, prob in enumerate(results['probabilities'])
                 ],
-                'plot_path': plot_path
+                'plot_path': plot_path,
+                'feature_filters': filter_visualizations,  # Nouvelle donnée
+                'has_filters': len(filter_visualizations) > 0
             }
 
             return web_results
 
         except Exception as e:
-            print(f"Erreur dans get_prediction_for_web: {e}")
+            print(f"Erreur dans get_prediction_for_web_with_filters: {e}")
             import traceback
             traceback.print_exc()
             raise
+
+    # Garder la méthode originale pour compatibilité
+    def get_prediction_for_web(self, image_data=None, image_path=None, temp_folder=None):
+        """Version originale sans filtres pour compatibilité"""
+        return self.get_prediction_for_web_with_filters(image_data, image_path, temp_folder)
