@@ -130,7 +130,10 @@ document.addEventListener('DOMContentLoaded', function () {
           // Afficher les filtres CNN si disponibles
           if (data.feature_filters && data.feature_filters.length > 0 && window.filterVisualization) {
             console.log(`[PredictionManager] Displaying ${data.feature_filters.length} CNN filters`);
-            window.filterVisualization.displayFilters(data.feature_filters);
+            // Attendre que l'affichage des résultats soit terminé avant d'afficher les filtres
+            setTimeout(() => {
+              window.filterVisualization.displayFilters(data.feature_filters);
+            }, 300);
           } else if (window.filterVisualization) {
             // Masquer les filtres s'il n'y en a pas
             window.filterVisualization.hideFilters();

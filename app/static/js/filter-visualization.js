@@ -91,30 +91,30 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
+    // Afficher la grille immédiatement
+    filtersGrid.style.display = 'grid';
+    showFiltersSection();
+
     // Créer les éléments de filtre avec animation décalée
     filters.forEach((filter, index) => {
       setTimeout(() => {
         createFilterElement(filter, index);
-      }, index * 100); // Délai de 100ms entre chaque filtre
+      }, index * 50); // Délai réduit à 50ms entre chaque filtre
     });
-
-    // Afficher la grille
-    filtersGrid.style.display = 'grid';
-    showFiltersSection();
   }
 
   // Créer un élément de filtre
   function createFilterElement(filter, index) {
     const filterItem = document.createElement('div');
     filterItem.className = 'filter-item';
-    filterItem.style.animationDelay = `${index * 0.1}s`;
+    filterItem.style.animationDelay = `${index * 0.05}s`; // Animation plus rapide
 
     // Image du filtre
     const filterImage = document.createElement('img');
     filterImage.className = 'filter-image';
     filterImage.src = filter.image;
     filterImage.alt = `Filtre ${filter.title}`;
-    filterImage.loading = 'lazy';
+    filterImage.loading = 'eager'; // Charger immédiatement
 
     // Titre du filtre
     const filterTitle = document.createElement('div');
@@ -128,11 +128,12 @@ document.addEventListener('DOMContentLoaded', function () {
     // Extraire le nom de la couche pour l'affichage
     const layerDisplay = filter.layer.includes('conv_1') ? 'Couche 1' :
       filter.layer.includes('conv_2') ? 'Couche 2' :
-        filter.layer.includes('conv_3') ? 'Couche 3' : 'Couche ?';
+        filter.layer.includes('conv_3') ? 'Couche 3' :
+        filter.layer.includes('conv_4') ? 'Couche 4' : 'Couche ?';
 
     filterInfo.innerHTML = `
           <div>${layerDisplay}</div>
-          <div>Activation: ${filter.variance ? filter.variance.toFixed(2) : 'N/A'}</div>
+          <div>Activation: ${filter.variance ? filter.variance.toFixed(3) : 'N/A'}</div>
       `;
 
     // Ajouter les éléments
@@ -149,13 +150,23 @@ document.addEventListener('DOMContentLoaded', function () {
       hideFilterTooltip();
     });
 
-    // Gestion d'erreur pour l'image
+    // Gestion d'erreur pour l'image avec meilleur fallback
     filterImage.addEventListener('error', function () {
       console.warn(`[FilterViz] Failed to load filter image: ${filter.title}`);
       filterImage.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiBmaWxsPSIjZjhmOWZhIi8+CjxwYXRoIGQ9Ik02MCA0MEw4MCA4MEg0MEw2MCA0MFoiIGZpbGw9IiNkZWUyZTYiLz4KPHRleHQgeD0iNjAiIHk9IjEwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzZjNzU3ZCIgZm9udC1zaXplPSIxMiI+RXJyZXVyPC90ZXh0Pgo8L3N2Zz4=';
     });
 
+    // Ajouter avec une animation d'entrée
+    filterItem.style.opacity = '0';
+    filterItem.style.transform = 'translateY(20px)';
     filtersGrid.appendChild(filterItem);
+
+    // Déclencher l'animation après ajout au DOM
+    requestAnimationFrame(() => {
+      filterItem.style.transition = 'all 0.3s ease-out';
+      filterItem.style.opacity = '1';
+      filterItem.style.transform = 'translateY(0)';
+    });
   }
 
   // Afficher un message quand il n'y a pas de filtres

@@ -25,14 +25,15 @@ class CNN_MODEL:
         try:
             self.model = load_model(model_path)
             print(f"Modèle chargé depuis: {model_path}")
-            
+
             # DEBUG: Afficher l'architecture du modèle
             print("=== ARCHITECTURE DU MODÈLE ===")
             self.model.summary()
             print("==============================")
 
-            # Créer des modèles pour extraire les feature maps des couches intermédiaires
-            self._create_feature_extractors()
+            # Initialiser les extracteurs à None - ils seront créés à la première prédiction
+            self.feature_extractors = {}
+            self._extractors_initialized = False
 
         except Exception as e:
             print(f"Erreur lors du chargement du modèle: {e}")
@@ -40,12 +41,27 @@ class CNN_MODEL:
             traceback.print_exc()
             self.model = None
             self.feature_extractors = {}
+            self._extractors_initialized = False
 
         # Thread lock pour les opérations matplotlib
         self._plot_lock = threading.Lock()
+        self._extractor_lock = threading.Lock()
 
         # Configuration matplotlib pour éviter les problèmes de threading
         plt.ioff()  # Turn off interactive mode
+
+    def _ensure_extractors_initialized(self):
+        """S'assurer que les extracteurs sont initialisés (thread-safe)"""
+        if self._extractors_initialized:
+            return
+
+        with self._extractor_lock:
+            # Double-check locking pattern
+            if self._extractors_initialized:
+                return
+
+            print("🔧 Initialisation des extracteurs de features...")
+            self._create_feature_extractors()
 
     def _create_feature_extractors(self):
         """Créer des extracteurs de features pour visualiser les couches intermédiaires"""
@@ -56,65 +72,147 @@ class CNN_MODEL:
             return
 
         print("\n=== CRÉATION DES EXTRACTEURS DE FEATURES ===")
-        
+
+        try:
+            # SOLUTION ALTERNATIVE: Reconstruire le modèle avec input explicite
+            print("🔧 Reconstruction du modèle avec input explicite...")
+
+            # Créer un input explicite
+            from tensorflow.keras.layers import Input
+            from tensorflow.keras.models import Model
+
+            # Définir l'input explicitement
+            input_layer = Input(shape=(28, 28, 1), name='explicit_input')
+
+            # Appliquer le modèle à cet input pour forcer la construction
+            try:
+                # Première tentative: utiliser le modèle directement
+                output = self.model(input_layer)
+
+                # Créer un nouveau modèle avec input/output explicites
+                self.functional_model = Model(inputs=input_layer, outputs=output)
+                print("✓ Modèle fonctionnel créé avec succès")
+
+                # Utiliser le modèle fonctionnel pour les extracteurs
+                model_to_use = self.functional_model
+
+            except Exception as func_error:
+                print(f"⚠️ Échec création modèle fonctionnel: {func_error}")
+
+                # Deuxième tentative: forcer la construction avec predict
+                print("🔧 Tentative de construction par prédiction...")
+                test_input = np.random.rand(1, 28, 28, 1).astype(np.float32)
+                _ = self.model.predict(test_input, verbose=0)
+
+                # Troisième tentative: créer un modèle à partir de zéro
+                print("🔧 Reconstruction complète du modèle...")
+                try:
+                    # Créer un nouveau modèle en clonant l'architecture
+                    input_layer = Input(shape=(28, 28, 1), name='reconstructed_input')
+                    x = input_layer
+
+                    # Appliquer chaque couche séquentiellement
+                    for layer in self.model.layers:
+                        x = layer(x)
+
+                    # Créer le modèle reconstruit
+                    self.functional_model = Model(inputs=input_layer, outputs=x)
+                    model_to_use = self.functional_model
+                    print("✓ Modèle reconstruit avec succès")
+
+                except Exception as recons_error:
+                    print(f"❌ Échec reconstruction: {recons_error}")
+
+                    # DERNIER RECOURS: Utiliser une approche manuelle
+                    print("🔧 Dernier recours: approche manuelle...")
+                    if self._create_extractors_manual():
+                        return  # Succès avec l'approche manuelle
+                    else:
+                        print("❌ Toutes les approches ont échoué")
+                        self._extractors_initialized = True  # Éviter de réessayer
+                        return
+
+        except Exception as e:
+            print(f"❌ Erreur construction du modèle: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+
         # DEBUG: Lister toutes les couches
         print(f"Nombre total de couches: {len(self.model.layers)}")
         for i, layer in enumerate(self.model.layers):
             print(f"Couche {i}: {layer.name} (Type: {type(layer).__name__})")
 
-        # Identifier les couches convolutionnelles
+        # APPROCHE ALTERNATIVE: Identifier les couches conv depuis le modèle fonctionnel
         conv_layers = []
-        for i, layer in enumerate(self.model.layers):
-            is_conv = 'conv' in layer.name.lower() or isinstance(layer, tf.keras.layers.Conv2D)
-            if is_conv:
-                conv_layers.append((i, layer.name, layer))
-                print(f"✓ Couche convolutionnelle trouvée: {i} - {layer.name}")
 
-        print(f"\nCouches convolutionnelles trouvées: {len(conv_layers)}")
+        # Utiliser le modèle fonctionnel si disponible
+        source_model = getattr(self, 'functional_model', model_to_use)
+
+        for i, layer in enumerate(source_model.layers):
+            is_conv = ('conv' in layer.name.lower() or
+                      isinstance(layer, tf.keras.layers.Conv2D) or
+                      type(layer).__name__ in ['Conv2D', 'DepthwiseConv2D', 'SeparableConv2D'])
+
+            if is_conv:
+                try:
+                    # Utiliser get_layer pour obtenir la couche depuis le modèle fonctionnel
+                    layer_from_model = source_model.get_layer(layer.name)
+
+                    conv_layers.append((i, layer.name, layer_from_model))
+                    print(f"✓ Couche convolutionnelle trouvée: {i} - {layer.name}")
+
+                except Exception as layer_error:
+                    print(f"⚠️ Erreur vérification couche {i} - {layer.name}: {layer_error}")
+
+        print(f"\nCouches convolutionnelles valides trouvées: {len(conv_layers)}")
         print(f"Détails: {[(i, name) for i, name, _ in conv_layers]}")
 
         if len(conv_layers) == 0:
-            print("❌ AUCUNE COUCHE CONVOLUTIONNELLE TROUVÉE!")
-            print("Recherche de couches alternatives...")
-            
-            # Recherche plus large
-            for i, layer in enumerate(self.model.layers):
-                layer_type = type(layer).__name__
-                if any(keyword in layer_type.lower() for keyword in ['conv', 'depthwise', 'separable']):
-                    print(f"   Couche alternative trouvée: {i} - {layer.name} ({layer_type})")
-                    conv_layers.append((i, layer.name, layer))
+            print("❌ AUCUNE COUCHE CONVOLUTIONNELLE VALIDE TROUVÉE!")
+            self._extractors_initialized = True  # Éviter de réessayer
+            return
 
         # Créer des extracteurs pour les premières couches (les plus interprétables)
         extractors_created = 0
-        for i, (layer_idx, layer_name, layer) in enumerate(conv_layers[:3]):  # Prendre les 3 premières couches conv
+        for i, (layer_idx, layer_name, layer) in enumerate(conv_layers[:4]):  # Prendre les 4 premières couches conv
             try:
                 print(f"\nCréation extracteur pour couche {layer_idx}: {layer_name}")
-                print(f"  Shape de sortie: {layer.output_shape}")
-                
-                extractor = Model(inputs=self.model.input, outputs=layer.output)
+                print(f"  Shape de sortie: {layer.output.shape}")
+
+                # Utiliser le modèle approprié (fonctionnel si disponible, sinon original)
+                source_model = getattr(self, 'functional_model', model_to_use)
+                model_input = source_model.input if hasattr(source_model, 'input') else source_model.inputs[0]
+
+                # Obtenir la sortie de la couche depuis le bon modèle
+                layer_output = source_model.get_layer(layer_name).output
+
+                # Créer l'extracteur avec gestion d'erreur robuste
+                extractor = Model(inputs=model_input, outputs=layer_output)
                 extractor_name = f"conv_{i+1}_{layer_name}"
+
+                # Test de l'extracteur avant de le sauvegarder
+                test_input = np.random.rand(1, 28, 28, 1).astype(np.float32)
+                test_output = extractor.predict(test_input, verbose=0)
+                print(f"  Test réussi - Output shape: {test_output.shape}")
+
+                # Si le test réussit, sauvegarder l'extracteur
                 self.feature_extractors[extractor_name] = extractor
                 extractors_created += 1
-                
                 print(f"✓ Extracteur créé: {extractor_name}")
-                
-                # Test rapide de l'extracteur
-                try:
-                    test_input = np.random.rand(1, 28, 28, 1)
-                    test_output = extractor.predict(test_input, verbose=0)
-                    print(f"  Test réussi - Output shape: {test_output.shape}")
-                except Exception as test_error:
-                    print(f"  ❌ Test extracteur échoué: {test_error}")
-                    
+
             except Exception as e:
                 print(f"✗ Erreur création extracteur pour {layer_name}: {e}")
                 import traceback
                 traceback.print_exc()
+                continue
 
         print(f"\n=== RÉSUMÉ EXTRACTEURS ===")
         print(f"Extracteurs créés: {extractors_created}")
         print(f"Noms des extracteurs: {list(self.feature_extractors.keys())}")
         print("===========================\n")
+
+        self._extractors_initialized = True
 
     @contextmanager
     def _safe_plotting(self):
@@ -184,9 +282,13 @@ class CNN_MODEL:
             dict: Feature maps pour chaque couche
         """
         print(f"\n=== EXTRACTION DES FEATURE MAPS ===")
+
+        # S'assurer que les extracteurs sont initialisés
+        self._ensure_extractors_initialized()
+
         print(f"Nombre d'extracteurs disponibles: {len(self.feature_extractors)}")
         print(f"Image input shape: {processed_image.shape}")
-        
+
         feature_maps = {}
 
         for layer_name, extractor in self.feature_extractors.items():
@@ -219,13 +321,13 @@ class CNN_MODEL:
         print(f"\n=== SÉLECTION DES FILTRES REPRÉSENTATIFS ===")
         print(f"Feature maps disponibles: {len(feature_maps)}")
         print(f"Cible: {n_filters} filtres")
-        
+
         selected_filters = []
 
         for layer_name, features in feature_maps.items():
             print(f"\nAnalyse de la couche: {layer_name}")
             print(f"  Shape: {features.shape}")
-            
+
             if len(features.shape) == 4:  # (batch, height, width, channels)
                 n_channels = features.shape[-1]
                 print(f"  Nombre de canaux: {n_channels}")
@@ -235,36 +337,40 @@ class CNN_MODEL:
                 for i in range(n_channels):
                     filter_map = features[0, :, :, i]
                     variance = np.var(filter_map)
-                    filter_variances.append((variance, i, filter_map))
+                    # Aussi calculer l'activation moyenne pour éviter les filtres "morts"
+                    mean_activation = np.mean(np.abs(filter_map))
+                    combined_score = variance * (1 + mean_activation)  # Score combiné
+                    filter_variances.append((combined_score, i, filter_map, variance))
 
-                # Trier par variance décroissante
+                # Trier par score combiné décroissant
                 filter_variances.sort(reverse=True, key=lambda x: x[0])
-                
-                print(f"  Top 3 variances: {[f'{v:.6f}' for v, _, _ in filter_variances[:3]]}")
+
+                print(f"  Top 3 scores: {[f'{score:.6f}' for score, _, _, _ in filter_variances[:3]]}")
 
                 # Prendre les filtres les plus actifs
                 filters_per_layer = min(3, len(filter_variances))  # Max 3 par couche
                 print(f"  Filtres sélectionnés pour cette couche: {filters_per_layer}")
-                
+
                 for j in range(filters_per_layer):
                     if len(selected_filters) < n_filters:
-                        variance, filter_idx, filter_map = filter_variances[j]
-                        
+                        combined_score, filter_idx, filter_map, variance = filter_variances[j]
+
                         # Extraire le numéro de couche pour le titre
                         try:
                             layer_num = layer_name.split('_')[1]
                         except:
                             layer_num = "?"
-                            
+
                         filter_info = {
                             'layer_name': layer_name,
                             'filter_index': filter_idx,
                             'feature_map': filter_map,
                             'variance': variance,
+                            'combined_score': combined_score,
                             'title': f"L{layer_num} F{filter_idx}"
                         }
                         selected_filters.append(filter_info)
-                        print(f"    ✓ Filtre ajouté: {filter_info['title']} (variance: {variance:.6f})")
+                        print(f"    ✓ Filtre ajouté: {filter_info['title']} (score: {combined_score:.6f})")
             else:
                 print(f"  ❌ Shape incompatible pour l'extraction de filtres: {features.shape}")
 
@@ -326,17 +432,17 @@ class CNN_MODEL:
             tuple: (résultats prédiction, image processed, feature maps sélectionnées)
         """
         print(f"\n🧠 PRÉDICTION AVEC FEATURE MAPS")
-        
+
         # Faire la prédiction normale
         results, processed_image = self.predict_from_image(image_path, image_data)
         print(f"Prédiction: {results['predicted_digit']} (confiance: {results['confidence']:.2f}%)")
 
-        # Extraire les feature maps
+        # Extraire les feature maps (ceci initialise les extracteurs si nécessaire)
         feature_maps = self.extract_feature_maps(processed_image)
 
         # Sélectionner les filtres les plus représentatifs
         selected_filters = self.select_representative_filters(feature_maps, n_filters=9)
-        
+
         print(f"🎯 Résultat final: {len(selected_filters)} filtres sélectionnés\n")
 
         return results, processed_image, selected_filters
@@ -353,23 +459,23 @@ class CNN_MODEL:
         """
         print(f"\n🎨 CRÉATION DES VISUALISATIONS")
         print(f"Filtres à visualiser: {len(selected_filters)}")
-        
+
         filter_images = []
 
         for idx, filter_info in enumerate(selected_filters):
             try:
                 print(f"  Création image {idx+1}/{len(selected_filters)}: {filter_info['title']}")
-                
+
                 # Créer une petite figure pour chaque filtre
                 fig, ax = plt.subplots(1, 1, figsize=(2, 2))
 
                 # Normaliser le feature map pour l'affichage
                 feature_map = filter_info['feature_map']
-                
+
                 # Debug info sur le feature map
                 print(f"    Feature map shape: {feature_map.shape}")
                 print(f"    Range: [{feature_map.min():.4f}, {feature_map.max():.4f}]")
-                
+
                 if feature_map.max() - feature_map.min() > 1e-8:
                     normalized_map = (feature_map - feature_map.min()) / (feature_map.max() - feature_map.min())
                 else:
@@ -388,7 +494,7 @@ class CNN_MODEL:
                 buffer.seek(0)
 
                 img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-                
+
                 filter_data = {
                     'image': f"data:image/png;base64,{img_base64}",
                     'title': filter_info['title'],
@@ -396,7 +502,7 @@ class CNN_MODEL:
                     'variance': float(filter_info['variance'])
                 }
                 filter_images.append(filter_data)
-                
+
                 print(f"    ✓ Image créée avec succès")
 
                 plt.close(fig)
@@ -427,7 +533,7 @@ class CNN_MODEL:
             print(f"\n🌐 GET_PREDICTION_FOR_WEB_WITH_FILTERS")
             print(f"Image path: {image_path}")
             print(f"Temp folder: {temp_folder}")
-            
+
             # Faire la prédiction avec feature maps
             results, processed_image, selected_filters = self.predict_with_feature_maps(
                 image_path=image_path, image_data=image_data
@@ -536,7 +642,7 @@ class CNN_MODEL:
                 'feature_filters': filter_visualizations,  # Nouvelle donnée
                 'has_filters': len(filter_visualizations) > 0
             }
-            
+
             print(f"🎯 Résultat final web: {len(filter_visualizations)} filtres dans la réponse\n")
 
             return web_results
@@ -547,7 +653,69 @@ class CNN_MODEL:
             traceback.print_exc()
             raise
 
-    # Garder la méthode originale pour compatibilité
+    def _create_extractors_manual(self):
+        """Méthode de fallback pour créer des extracteurs manuellement"""
+        try:
+            print("🛠️ Création manuelle d'extracteurs...")
+
+            # Faire une prédiction pour s'assurer que le modèle est exécuté
+            test_input = np.random.rand(1, 28, 28, 1).astype(np.float32)
+            _ = self.model.predict(test_input, verbose=0)
+
+            from tensorflow.keras.models import Model
+            from tensorflow.keras.layers import Input
+
+            # Identifier manuellement les couches par nom (basé sur votre log)
+            target_layers = ['conv2d_8', 'conv2d_9', 'conv2d_10', 'conv2d_11']
+
+            # Créer un input explicite
+            manual_input = Input(shape=(28, 28, 1), name='manual_input')
+
+            extractors_created = 0
+            for i, layer_name in enumerate(target_layers):
+                try:
+                    print(f"Tentative manuelle pour {layer_name}...")
+
+                    # Reconstruire le modèle jusqu'à cette couche
+                    x = manual_input
+                    target_found = False
+
+                    for layer in self.model.layers:
+                        x = layer(x)
+                        if layer.name == layer_name:
+                            # Créer l'extracteur pour cette couche
+                            extractor = Model(inputs=manual_input, outputs=x)
+                            extractor_name = f"conv_{i+1}_{layer_name}"
+
+                            # Test rapide
+                            test_output = extractor.predict(test_input, verbose=0)
+
+                            self.feature_extractors[extractor_name] = extractor
+                            extractors_created += 1
+                            target_found = True
+                            print(f"✓ Extracteur manuel créé: {extractor_name}")
+                            break
+
+                    if not target_found:
+                        print(f"⚠️ Couche {layer_name} non trouvée")
+
+                except Exception as manual_error:
+                    print(f"❌ Erreur extracteur manuel {layer_name}: {manual_error}")
+                    continue
+
+            print(f"🛠️ Extracteurs manuels créés: {extractors_created}")
+
+            if extractors_created > 0:
+                self._extractors_initialized = True
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            print(f"❌ Échec méthode manuelle: {e}")
+            return False
+
+    # Garder la méthode originale pour compatibilité - maintenant avec filtres par défaut
     def get_prediction_for_web(self, image_data=None, image_path=None, temp_folder=None):
-        """Version originale sans filtres pour compatibilité"""
+        """Version avec filtres par défaut pour compatibilité"""
         return self.get_prediction_for_web_with_filters(image_data, image_path, temp_folder)

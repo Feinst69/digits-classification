@@ -371,9 +371,15 @@ def api_predict_and_save():
                 ajax_results['feature_filters'] = web_result.get('feature_filters', [])
                 ajax_results['has_filters'] = web_result.get('has_filters', False)
                 print(f"[{request_id}] Added {len(ajax_results.get('feature_filters', []))} filter visualizations")
+                
+                # Log détaillé des filtres pour debug
+                if ajax_results['feature_filters']:
+                    for i, f in enumerate(ajax_results['feature_filters'][:3]):  # Log des 3 premiers
+                        print(f"[{request_id}] Filter {i}: {f.get('title', 'N/A')} - Layer: {f.get('layer', 'N/A')}")
             else:
                 ajax_results['feature_filters'] = []
                 ajax_results['has_filters'] = False
+                print(f"[{request_id}] No filters requested or available (show_filters: {show_filters})")
             
             # Ajouter des métadonnées pour l'historique
             ajax_results['saved_to_history'] = True
@@ -381,7 +387,8 @@ def api_predict_and_save():
             ajax_results['original_image'] = f"uploads/{filename}" if filepath else ''
             ajax_results['filters_enabled'] = show_filters
             
-            print(f"[{request_id}] Prediction completed successfully (filters: {show_filters})")
+            print(f"[{request_id}] Prediction completed successfully")
+            print(f"[{request_id}] Response summary: filters={len(ajax_results.get('feature_filters', []))}, has_filters={ajax_results.get('has_filters', False)}")
             return jsonify(ajax_results)
             
         except Exception as e:
