@@ -25,12 +25,19 @@ class CNN_MODEL:
         try:
             self.model = load_model(model_path)
             print(f"Modèle chargé depuis: {model_path}")
+            
+            # DEBUG: Afficher l'architecture du modèle
+            print("=== ARCHITECTURE DU MODÈLE ===")
+            self.model.summary()
+            print("==============================")
 
             # Créer des modèles pour extraire les feature maps des couches intermédiaires
             self._create_feature_extractors()
 
         except Exception as e:
             print(f"Erreur lors du chargement du modèle: {e}")
+            import traceback
+            traceback.print_exc()
             self.model = None
             self.feature_extractors = {}
 
@@ -45,24 +52,69 @@ class CNN_MODEL:
         self.feature_extractors = {}
 
         if self.model is None:
+            print("❌ Impossible de créer les extracteurs: modèle non chargé")
             return
+
+        print("\n=== CRÉATION DES EXTRACTEURS DE FEATURES ===")
+        
+        # DEBUG: Lister toutes les couches
+        print(f"Nombre total de couches: {len(self.model.layers)}")
+        for i, layer in enumerate(self.model.layers):
+            print(f"Couche {i}: {layer.name} (Type: {type(layer).__name__})")
 
         # Identifier les couches convolutionnelles
         conv_layers = []
         for i, layer in enumerate(self.model.layers):
-            if 'conv' in layer.name.lower() or isinstance(layer, tf.keras.layers.Conv2D):
+            is_conv = 'conv' in layer.name.lower() or isinstance(layer, tf.keras.layers.Conv2D)
+            if is_conv:
                 conv_layers.append((i, layer.name, layer))
+                print(f"✓ Couche convolutionnelle trouvée: {i} - {layer.name}")
 
-        print(f"Couches convolutionnelles trouvées: {[name for _, name, _ in conv_layers]}")
+        print(f"\nCouches convolutionnelles trouvées: {len(conv_layers)}")
+        print(f"Détails: {[(i, name) for i, name, _ in conv_layers]}")
+
+        if len(conv_layers) == 0:
+            print("❌ AUCUNE COUCHE CONVOLUTIONNELLE TROUVÉE!")
+            print("Recherche de couches alternatives...")
+            
+            # Recherche plus large
+            for i, layer in enumerate(self.model.layers):
+                layer_type = type(layer).__name__
+                if any(keyword in layer_type.lower() for keyword in ['conv', 'depthwise', 'separable']):
+                    print(f"   Couche alternative trouvée: {i} - {layer.name} ({layer_type})")
+                    conv_layers.append((i, layer.name, layer))
 
         # Créer des extracteurs pour les premières couches (les plus interprétables)
+        extractors_created = 0
         for i, (layer_idx, layer_name, layer) in enumerate(conv_layers[:3]):  # Prendre les 3 premières couches conv
             try:
+                print(f"\nCréation extracteur pour couche {layer_idx}: {layer_name}")
+                print(f"  Shape de sortie: {layer.output_shape}")
+                
                 extractor = Model(inputs=self.model.input, outputs=layer.output)
-                self.feature_extractors[f"conv_{i+1}_{layer_name}"] = extractor
-                print(f"✓ Extracteur créé pour: {layer_name}")
+                extractor_name = f"conv_{i+1}_{layer_name}"
+                self.feature_extractors[extractor_name] = extractor
+                extractors_created += 1
+                
+                print(f"✓ Extracteur créé: {extractor_name}")
+                
+                # Test rapide de l'extracteur
+                try:
+                    test_input = np.random.rand(1, 28, 28, 1)
+                    test_output = extractor.predict(test_input, verbose=0)
+                    print(f"  Test réussi - Output shape: {test_output.shape}")
+                except Exception as test_error:
+                    print(f"  ❌ Test extracteur échoué: {test_error}")
+                    
             except Exception as e:
                 print(f"✗ Erreur création extracteur pour {layer_name}: {e}")
+                import traceback
+                traceback.print_exc()
+
+        print(f"\n=== RÉSUMÉ EXTRACTEURS ===")
+        print(f"Extracteurs créés: {extractors_created}")
+        print(f"Noms des extracteurs: {list(self.feature_extractors.keys())}")
+        print("===========================\n")
 
     @contextmanager
     def _safe_plotting(self):
@@ -131,16 +183,26 @@ class CNN_MODEL:
         Returns:
             dict: Feature maps pour chaque couche
         """
+        print(f"\n=== EXTRACTION DES FEATURE MAPS ===")
+        print(f"Nombre d'extracteurs disponibles: {len(self.feature_extractors)}")
+        print(f"Image input shape: {processed_image.shape}")
+        
         feature_maps = {}
 
         for layer_name, extractor in self.feature_extractors.items():
             try:
+                print(f"Extraction pour {layer_name}...")
                 features = extractor.predict(processed_image, verbose=0)
                 feature_maps[layer_name] = features
-                print(f"Feature maps extraites pour {layer_name}: shape {features.shape}")
+                print(f"✓ Feature maps extraites pour {layer_name}: shape {features.shape}")
+                print(f"  Min: {features.min():.4f}, Max: {features.max():.4f}, Mean: {features.mean():.4f}")
             except Exception as e:
-                print(f"Erreur extraction features {layer_name}: {e}")
+                print(f"❌ Erreur extraction features {layer_name}: {e}")
+                import traceback
+                traceback.print_exc()
 
+        print(f"Feature maps extraites avec succès: {len(feature_maps)}")
+        print("=====================================\n")
         return feature_maps
 
     def select_representative_filters(self, feature_maps, n_filters=9):
@@ -154,34 +216,60 @@ class CNN_MODEL:
         Returns:
             list: Liste des (layer_name, filter_index, feature_map) sélectionnés
         """
+        print(f"\n=== SÉLECTION DES FILTRES REPRÉSENTATIFS ===")
+        print(f"Feature maps disponibles: {len(feature_maps)}")
+        print(f"Cible: {n_filters} filtres")
+        
         selected_filters = []
 
         for layer_name, features in feature_maps.items():
+            print(f"\nAnalyse de la couche: {layer_name}")
+            print(f"  Shape: {features.shape}")
+            
             if len(features.shape) == 4:  # (batch, height, width, channels)
                 n_channels = features.shape[-1]
+                print(f"  Nombre de canaux: {n_channels}")
 
                 # Calculer la variance de chaque filtre pour trouver les plus actifs
                 filter_variances = []
                 for i in range(n_channels):
-                    variance = np.var(features[0, :, :, i])
-                    filter_variances.append((variance, i, features[0, :, :, i]))
+                    filter_map = features[0, :, :, i]
+                    variance = np.var(filter_map)
+                    filter_variances.append((variance, i, filter_map))
 
                 # Trier par variance décroissante
                 filter_variances.sort(reverse=True, key=lambda x: x[0])
+                
+                print(f"  Top 3 variances: {[f'{v:.6f}' for v, _, _ in filter_variances[:3]]}")
 
                 # Prendre les filtres les plus actifs
                 filters_per_layer = min(3, len(filter_variances))  # Max 3 par couche
+                print(f"  Filtres sélectionnés pour cette couche: {filters_per_layer}")
+                
                 for j in range(filters_per_layer):
                     if len(selected_filters) < n_filters:
                         variance, filter_idx, filter_map = filter_variances[j]
-                        selected_filters.append({
+                        
+                        # Extraire le numéro de couche pour le titre
+                        try:
+                            layer_num = layer_name.split('_')[1]
+                        except:
+                            layer_num = "?"
+                            
+                        filter_info = {
                             'layer_name': layer_name,
                             'filter_index': filter_idx,
                             'feature_map': filter_map,
                             'variance': variance,
-                            'title': f"{layer_name.split('_')[1]} F{filter_idx}"
-                        })
+                            'title': f"L{layer_num} F{filter_idx}"
+                        }
+                        selected_filters.append(filter_info)
+                        print(f"    ✓ Filtre ajouté: {filter_info['title']} (variance: {variance:.6f})")
+            else:
+                print(f"  ❌ Shape incompatible pour l'extraction de filtres: {features.shape}")
 
+        print(f"\nFiltres sélectionnés au total: {len(selected_filters)}")
+        print("==========================================\n")
         return selected_filters[:n_filters]
 
     def predict(self, processed_image):
@@ -237,14 +325,19 @@ class CNN_MODEL:
         Returns:
             tuple: (résultats prédiction, image processed, feature maps sélectionnées)
         """
+        print(f"\n🧠 PRÉDICTION AVEC FEATURE MAPS")
+        
         # Faire la prédiction normale
         results, processed_image = self.predict_from_image(image_path, image_data)
+        print(f"Prédiction: {results['predicted_digit']} (confiance: {results['confidence']:.2f}%)")
 
         # Extraire les feature maps
         feature_maps = self.extract_feature_maps(processed_image)
 
         # Sélectionner les filtres les plus représentatifs
         selected_filters = self.select_representative_filters(feature_maps, n_filters=9)
+        
+        print(f"🎯 Résultat final: {len(selected_filters)} filtres sélectionnés\n")
 
         return results, processed_image, selected_filters
 
@@ -258,16 +351,30 @@ class CNN_MODEL:
         Returns:
             list: Liste des images en base64
         """
+        print(f"\n🎨 CRÉATION DES VISUALISATIONS")
+        print(f"Filtres à visualiser: {len(selected_filters)}")
+        
         filter_images = []
 
-        for filter_info in selected_filters:
+        for idx, filter_info in enumerate(selected_filters):
             try:
+                print(f"  Création image {idx+1}/{len(selected_filters)}: {filter_info['title']}")
+                
                 # Créer une petite figure pour chaque filtre
                 fig, ax = plt.subplots(1, 1, figsize=(2, 2))
 
                 # Normaliser le feature map pour l'affichage
                 feature_map = filter_info['feature_map']
-                normalized_map = (feature_map - feature_map.min()) / (feature_map.max() - feature_map.min() + 1e-8)
+                
+                # Debug info sur le feature map
+                print(f"    Feature map shape: {feature_map.shape}")
+                print(f"    Range: [{feature_map.min():.4f}, {feature_map.max():.4f}]")
+                
+                if feature_map.max() - feature_map.min() > 1e-8:
+                    normalized_map = (feature_map - feature_map.min()) / (feature_map.max() - feature_map.min())
+                else:
+                    normalized_map = feature_map
+                    print(f"    ⚠️ Feature map constant, pas de normalisation")
 
                 # Afficher avec une colormap
                 im = ax.imshow(normalized_map, cmap='viridis', interpolation='nearest')
@@ -281,20 +388,27 @@ class CNN_MODEL:
                 buffer.seek(0)
 
                 img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-                filter_images.append({
+                
+                filter_data = {
                     'image': f"data:image/png;base64,{img_base64}",
                     'title': filter_info['title'],
                     'layer': filter_info['layer_name'],
                     'variance': float(filter_info['variance'])
-                })
+                }
+                filter_images.append(filter_data)
+                
+                print(f"    ✓ Image créée avec succès")
 
                 plt.close(fig)
                 buffer.close()
 
             except Exception as e:
-                print(f"Erreur création visualisation filtre: {e}")
+                print(f"    ❌ Erreur création visualisation filtre {filter_info['title']}: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
 
+        print(f"🎨 Visualisations créées: {len(filter_images)}/{len(selected_filters)}\n")
         return filter_images
 
     def get_prediction_for_web_with_filters(self, image_data=None, image_path=None, temp_folder=None):
@@ -310,6 +424,10 @@ class CNN_MODEL:
             dict: Résultats formatés pour l'affichage web avec filtres
         """
         try:
+            print(f"\n🌐 GET_PREDICTION_FOR_WEB_WITH_FILTERS")
+            print(f"Image path: {image_path}")
+            print(f"Temp folder: {temp_folder}")
+            
             # Faire la prédiction avec feature maps
             results, processed_image, selected_filters = self.predict_with_feature_maps(
                 image_path=image_path, image_data=image_data
@@ -418,11 +536,13 @@ class CNN_MODEL:
                 'feature_filters': filter_visualizations,  # Nouvelle donnée
                 'has_filters': len(filter_visualizations) > 0
             }
+            
+            print(f"🎯 Résultat final web: {len(filter_visualizations)} filtres dans la réponse\n")
 
             return web_results
 
         except Exception as e:
-            print(f"Erreur dans get_prediction_for_web_with_filters: {e}")
+            print(f"❌ Erreur dans get_prediction_for_web_with_filters: {e}")
             import traceback
             traceback.print_exc()
             raise
