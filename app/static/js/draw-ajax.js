@@ -90,9 +90,16 @@ document.addEventListener('DOMContentLoaded', function () {
       const formData = new FormData();
       formData.append('image_data', request.imageData);
 
-      // Ajouter le paramètre pour les filtres si disponible
-      if (window.filterVisualization) {
+      // Ajouter les paramètres pour les filtres si disponible
+      if (window.filterVisualization && window.filterVisualization.getFilterParameters) {
+        const filterParams = window.filterVisualization.getFilterParameters();
+        formData.append('show_filters', filterParams.show_filters);
+        formData.append('best_filters', filterParams.best_filters);
+        console.log(`[PredictionManager] Using filter parameters:`, filterParams);
+      } else if (window.filterVisualization) {
+        // Fallback pour compatibilité
         formData.append('show_filters', window.filterVisualization.getFilterParameter());
+        formData.append('best_filters', 'false');
       }
 
       // Faire la requête avec timeout et abort controller
@@ -129,7 +136,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
           // Afficher les filtres CNN si disponibles
           if (data.feature_filters && data.feature_filters.length > 0 && window.filterVisualization) {
-            console.log(`[PredictionManager] Displaying ${data.feature_filters.length} CNN filters`);
+            const isBestMode = window.filterVisualization.isBestFiltersEnabled ? window.filterVisualization.isBestFiltersEnabled() : false;
+            console.log(`[PredictionManager] Displaying ${data.feature_filters.length} CNN filters (Best mode: ${isBestMode})`);
+            
+            // Afficher un message spécial si le mode "meilleurs filtres" est activé
+            if (isBestMode && data.feature_filters.length > 0) {
+              console.log('[PredictionManager] 🎯 Best filters mode active - showing highest activity filters');
+            }
+            
             // Attendre que l'affichage des résultats soit terminé avant d'afficher les filtres
             setTimeout(() => {
               window.filterVisualization.displayFilters(data.feature_filters);

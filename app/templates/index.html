@@ -84,15 +84,12 @@
       </div>
     </div>
 
-    <div class="filters-legend">
-      <h4>Légende :</h4>
-      <ul>
-        <li><strong>L1 F#</strong> - Couche 1, Filtre # (détecte contours basiques)</li>
-        <li><strong>L2 F#</strong> - Couche 2, Filtre # (détecte formes intermédiaires)</li>
-        <li><strong>L3 F#</strong> - Couche 3, Filtre # (détecte motifs complexes)</li>
-      </ul>
-      <p class="legend-note">
-        Plus la zone est claire/colorée, plus le filtre est activé par cette partie de l'image.
+    <div class="filters-explanation">
+      <h4>Comprendre les visualisations :</h4>
+      <p><strong>Activation</strong> : Mesure l'intensité de réponse du filtre aux motifs détectés dans votre chiffre. Plus la valeur est élevée, plus le filtre "reconnaît" des caractéristiques importantes.</p>
+      <p><strong>Bloc de Convolution</strong> : Chaque bloc analyse l'image à un niveau différent - le 1er détecte des contours simples, le 2e reconnaît des formes plus complexes qui permettent d'identifier le chiffre.</p>
+      <p class="explanation-note">
+        Les zones claires dans les filtres montrent où le réseau "porte son attention" pour reconnaître votre chiffre.
       </p>
     </div>
   </div>
@@ -166,10 +163,8 @@
   }
 
   .filters-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-    max-width: 600px;
+    display: block;
+    max-width: 800px;
     margin: 0 auto;
   }
 
@@ -212,34 +207,62 @@
     text-align: center;
   }
 
-  .filters-legend {
+  .activation-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: #495057;
+    margin-bottom: 2px;
+  }
+
+  .filters-explanation {
     margin-top: 30px;
     padding: 20px;
     background: rgba(255, 255, 255, 0.8);
     border-radius: 10px;
-    border-left: 4px solid #007bff;
+    border-left: 4px solid #28a745;
   }
 
-  .filters-legend h4 {
+  .filters-explanation h4 {
     margin-bottom: 15px;
     color: #495057;
+    font-size: 18px;
   }
 
-  .filters-legend ul {
-    margin-bottom: 15px;
-    padding-left: 20px;
-  }
-
-  .filters-legend li {
-    margin-bottom: 8px;
+  .filters-explanation p {
+    margin-bottom: 12px;
     color: #6c757d;
+    line-height: 1.6;
   }
 
-  .legend-note {
-    margin: 0;
+  .explanation-note {
+    margin: 15px 0 0 0;
     font-style: italic;
     color: #6c757d;
     font-size: 14px;
+    border-top: 1px solid #e9ecef;
+    padding-top: 15px;
+  }
+
+  /* Styles pour les en-têtes de couches */
+  .layer-header {
+    grid-column: 1 / -1;
+    text-align: center;
+    font-weight: 600;
+    font-size: 16px;
+    color: #495057;
+    margin: 20px 0 10px 0;
+    padding: 10px;
+    background: rgba(0,123,255,0.1);
+    border-radius: 8px;
+    border-left: 4px solid #007bff;
+  }
+
+  /* Ajustements pour la grille de filtres */
+  .filter-block-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    justify-items: center;
   }
 
   /* Toggle pour les filtres */
@@ -285,7 +308,7 @@
 
   /* Responsive design pour les filtres */
   @media (max-width: 768px) {
-    .filters-grid {
+    .filter-block-grid {
       grid-template-columns: repeat(2, 1fr);
       gap: 15px;
     }
@@ -299,12 +322,22 @@
       padding: 20px;
       margin: 20px 0;
     }
+    
+    .filter-block-container {
+      margin: 20px 0;
+      padding: 15px;
+    }
   }
 
   @media (max-width: 480px) {
-    .filters-grid {
+    .filter-block-grid {
       grid-template-columns: 1fr;
       gap: 15px;
+    }
+    
+    .filter-block-container {
+      margin: 15px 0;
+      padding: 10px;
     }
   }
 
@@ -316,6 +349,16 @@
     gap: 15px;
     margin-top: 15px;
     flex-wrap: wrap;
+  }
+
+  .best-filters-description {
+    margin: 5px 0 0 0;
+    font-size: 12px;
+    color: #6c757d;
+    font-style: italic;
+    text-align: center;
+    max-width: 300px;
+    line-height: 1.3;
   }
 
   @media (max-width: 480px) {

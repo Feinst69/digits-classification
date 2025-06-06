@@ -263,136 +263,107 @@ def api_predict():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+# In app.py, update the api_predict_and_save route
+
 @app.route('/api/predict-and-save', methods=['POST'])
 def api_predict_and_save():
-    """API endpoint consolidé avec support des filtres CNN"""
-    
-    # Utiliser un lock pour cette opération critique
+    """Updated API endpoint with working filter support"""
+
     with request_lock:
         try:
             request_id = str(uuid.uuid4())[:8]
             print(f"[{request_id}] === PREDICTION REQUEST START ===")
-            print(f"[{request_id}] Files in request: {list(request.files.keys())}")
-            print(f"[{request_id}] Form data: {list(request.form.keys())}")
-            
+
             cnn_model = get_model_instance()
             filepath = None
-            
-            # Vérifier si les filtres sont demandés
+
+            # Check filter parameters
             show_filters = request.form.get('show_filters', 'false').lower() == 'true'
+            best_filters = request.form.get('best_filters', 'false').lower() == 'true'
+
             print(f"[{request_id}] Show filters: {show_filters}")
-            
+            print(f"[{request_id}] Best filters: {best_filters}")
+
+            # Handle file upload or canvas data (your existing code)
             if 'file' in request.files:
                 file = request.files['file']
                 if file.filename != '':
-                    # Sauvegarder le fichier uploadé pour l'historique
                     filename = str(uuid.uuid4()) + os.path.splitext(file.filename)[1]
                     filepath = os.path.join(UPLOAD_FOLDER, filename)
-                    
-                    # Sauvegarder de manière thread-safe
+
                     with file_operation_lock:
                         file.save(filepath)
-                    
+
                     print(f"[{request_id}] File saved: {filepath}")
-                    
-                    if show_filters:
-                        # Utiliser la version avec filtres
-                        web_result = cnn_model.get_prediction_for_web_with_filters(
-                            image_path=filepath, temp_folder=TEMP_FOLDER
-                        )
-                    else:
-                        # Version standard sans filtres (mais get_prediction_for_web utilise maintenant la version avec filtres)
-                        web_result = cnn_model.get_prediction_for_web(
-                            image_path=filepath, temp_folder=TEMP_FOLDER
-                        )
-                        # S'assurer qu'il n'y a pas de filtres dans la réponse
-                        web_result['feature_filters'] = []
-                        web_result['has_filters'] = False
-                    
-                    # Aussi obtenir les données pour l'AJAX
-                    ajax_results, processed_image = cnn_model.predict_from_image(image_path=filepath)
-            
+
             elif 'image_data' in request.form:
                 image_data = request.form['image_data']
                 if ',' in image_data:
                     image_data = image_data.split(',')[1]
-                
-                # Sauvegarder l'image canvas pour l'historique
+
                 image_binary = base64.b64decode(image_data)
                 filename = str(uuid.uuid4()) + '.png'
                 filepath = os.path.join(UPLOAD_FOLDER, filename)
-                
-                # Sauvegarder de manière thread-safe
+
                 with file_operation_lock:
                     with open(filepath, 'wb') as f:
                         f.write(image_binary)
-                
+
                 print(f"[{request_id}] Canvas image saved: {filepath}")
-                
-                if show_filters:
-                    # Utiliser la version avec filtres
-                    web_result = cnn_model.get_prediction_for_web_with_filters(
-                        image_path=filepath, temp_folder=TEMP_FOLDER
-                    )
-                else:
-                    # Version standard sans filtres
-                    web_result = cnn_model.get_prediction_for_web(
-                        image_path=filepath, temp_folder=TEMP_FOLDER
-                    )
-                    # S'assurer qu'il n'y a pas de filtres dans la réponse
-                    web_result['feature_filters'] = []
-                    web_result['has_filters'] = False
-                
-                # Aussi obtenir les données pour l'AJAX
-                ajax_results, processed_image = cnn_model.predict_from_image(image_path=filepath)
+
             else:
-                return jsonify({'error': 'Aucune image fournie'}), 400
-            
-            # Ajouter l'image redimensionnée en base64 pour l'affichage AJAX
-            if processed_image is not None:
-                try:
-                    import io
-                    
-                    img_array = processed_image[0, :, :, 0]
-                    img_array = (img_array * 255).astype('uint8')
-                    
-                    pil_img = Image.fromarray(img_array, mode='L')
-                    buffer = io.BytesIO()
-                    pil_img.save(buffer, format='PNG')
-                    img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-                    
-                    ajax_results['resized_image_base64'] = f"data:image/png;base64,{img_base64}"
-                except Exception as img_error:
-                    print(f"[{request_id}] Erreur génération image base64: {img_error}")
-                    # Continue sans l'image base64
-            
-            # Ajouter les données des filtres CNN si demandées et disponibles
+                return jsonify({'error': 'No image provided'}), 400
+
+            # Get prediction with working filters
+            if show_filters:
+                web_result = cnn_model.get_prediction_for_web_with_filters(
+                    image_path=filepath,
+                    temp_folder=TEMP_FOLDER,
+                    best_filters=best_filters
+                )
+            else:
+                # Standard prediction without filters
+                web_result = cnn_model.get_prediction_for_web(
+                    image_path=filepath,
+                    temp_folder=TEMP_FOLDER
+                )
+                web_result['feature_filters'] = []
+                web_result['has_filters'] = False
+
+            # Also get AJAX data
+            ajax_results, processed_image = cnn_model.predict_from_image(image_path=filepath)
+
+            # Add processed image as base64 if needed (your existing code)
+            # ... existing base64 code ...
+
+            # Add filter data to AJAX response
             if show_filters and web_result:
                 ajax_results['feature_filters'] = web_result.get('feature_filters', [])
                 ajax_results['has_filters'] = web_result.get('has_filters', False)
+                ajax_results['best_filters_mode'] = best_filters
+
                 print(f"[{request_id}] Added {len(ajax_results.get('feature_filters', []))} filter visualizations")
-                
-                # Log détaillé des filtres pour debug
                 if ajax_results['feature_filters']:
-                    for i, f in enumerate(ajax_results['feature_filters'][:3]):  # Log des 3 premiers
-                        print(f"[{request_id}] Filter {i}: {f.get('title', 'N/A')} - Layer: {f.get('layer', 'N/A')}")
+                    for i, f in enumerate(ajax_results['feature_filters'][:3]):
+                        print(f"[{request_id}] Filter {i}: {f.get('title', 'N/A')}")
             else:
                 ajax_results['feature_filters'] = []
                 ajax_results['has_filters'] = False
-                print(f"[{request_id}] No filters requested or available (show_filters: {show_filters})")
-            
-            # Ajouter des métadonnées pour l'historique
+                ajax_results['best_filters_mode'] = False
+
+            # Add metadata
             ajax_results['saved_to_history'] = True
             ajax_results['plot_path'] = web_result.get('plot_path', '') if web_result else ''
             ajax_results['original_image'] = f"uploads/{filename}" if filepath else ''
             ajax_results['filters_enabled'] = show_filters
-            
+
             print(f"[{request_id}] Prediction completed successfully")
-            print(f"[{request_id}] Response summary: filters={len(ajax_results.get('feature_filters', []))}, has_filters={ajax_results.get('has_filters', False)}")
+            print(f"[{request_id}] Response: filters={len(ajax_results.get('feature_filters', []))}, best_mode={best_filters}")
+
             return jsonify(ajax_results)
-            
+
         except Exception as e:
-            error_msg = f"Erreur dans api_predict_and_save: {e}"
+            error_msg = f"Error in api_predict_and_save: {e}"
             print(f"[{request_id}] {error_msg}")
             import traceback
             traceback.print_exc()

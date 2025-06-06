@@ -9,7 +9,105 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // État des filtres
   let filtersEnabled = true;
+  let bestFiltersEnabled = true; // Activé par défaut
   let currentFilters = [];
+
+  // Ajouter le toggle pour les meilleurs filtres
+  function addBestFiltersToggle() {
+    // Vérifier si le toggle existe déjà pour éviter les doublons
+    if (document.getElementById('best-filters-checkbox')) {
+      return; // Déjà ajouté
+    }
+    
+    // Trouver le conteneur des outils de dessin où se trouve le toggle principal
+    const drawingTools = document.querySelector('.drawing-tools');
+    if (drawingTools) {
+      const toggleHTML = `
+        <label class="filter-toggle best-filters-toggle">
+          <input type="checkbox" id="best-filters-checkbox" checked>
+          <span class="toggle-text">🎯 Utiliser les meilleurs filtres (activité élevée)</span>
+        </label>
+        <p class="best-filters-description">Active la sélection des 3 filtres les plus actifs au lieu des 3 premiers</p>
+      `;
+      
+      // Insérer après le toggle principal des filtres
+      const mainToggle = drawingTools.querySelector('.filter-toggle');
+      if (mainToggle) {
+        mainToggle.insertAdjacentHTML('afterend', toggleHTML);
+        
+        // Ajouter l'event listener pour le nouveau toggle
+        const bestFiltersCheckbox = document.getElementById('best-filters-checkbox');
+        if (bestFiltersCheckbox) {
+          // Synchroniser l'état avec le checkbox (activé par défaut)
+          bestFiltersEnabled = bestFiltersCheckbox.checked;
+          
+          bestFiltersCheckbox.addEventListener('change', function () {
+            bestFiltersEnabled = this.checked;
+            console.log(`[FilterViz] Best filters ${bestFiltersEnabled ? 'enabled' : 'disabled'}`);
+            
+            // Afficher un message informatif et l'indicateur visuel
+            if (bestFiltersEnabled) {
+              showInfoMessage('🎯 Mode meilleurs filtres activé - Les prochaines prédictions utiliseront les filtres les plus actifs');
+              updateBestFiltersIndicator();
+            }
+          });
+          
+          // Afficher l'indicateur au chargement si activé par défaut
+          if (bestFiltersEnabled) {
+            setTimeout(() => updateBestFiltersIndicator(), 1000);
+          }
+        }
+      }
+    }
+  }
+
+  // Fonction pour afficher un message informatif
+  function showInfoMessage(message) {
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'filter-info-message';
+    infoDiv.innerHTML = `
+      <div style="
+        background: #d1ecf1;
+        color: #0c5460;
+        padding: 10px 15px;
+        border-radius: 6px;
+        margin: 10px 0;
+        border-left: 4px solid #bee5eb;
+        font-size: 14px;
+        animation: fadeInOut 4s ease-in-out;
+      ">
+        ${message}
+      </div>
+    `;
+    
+    // Ajouter les styles d'animation si pas déjà présents
+    if (!document.getElementById('filter-info-styles')) {
+      const style = document.createElement('style');
+      style.id = 'filter-info-styles';
+      style.textContent = `
+        @keyframes fadeInOut {
+          0% { opacity: 0; transform: translateY(-10px); }
+          15% { opacity: 1; transform: translateY(0); }
+          85% { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-10px); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Insérer le message
+    const controlsDiv = filtersSection.querySelector('.filter-controls');
+    if (controlsDiv) {
+      controlsDiv.insertAdjacentElement('afterend', infoDiv);
+      
+      // Supprimer automatiquement après l'animation
+      setTimeout(() => {
+        if (infoDiv.parentNode) {
+          infoDiv.remove();
+        }
+      }, 4000);
+    }
+  }
 
   // Gestionnaire pour le toggle des filtres
   if (showFiltersCheckbox) {
@@ -18,11 +116,21 @@ document.addEventListener('DOMContentLoaded', function () {
       updateFiltersVisibility();
 
       console.log(`[FilterViz] Filters ${filtersEnabled ? 'enabled' : 'disabled'}`);
+      
+      // Ajouter le toggle des meilleurs filtres quand les filtres sont activés
+      if (filtersEnabled) {
+        addBestFiltersToggle();
+      }
     });
 
     // Initialiser l'état
     filtersEnabled = showFiltersCheckbox.checked;
     updateFiltersVisibility();
+    
+    // Si les filtres sont déjà activés au chargement, ajouter le toggle
+    if (filtersEnabled) {
+      addBestFiltersToggle();
+    }
   }
 
   // Fonction pour mettre à jour la visibilité de la section des filtres
@@ -66,6 +174,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Fonction pour afficher les filtres CNN
   function displayFilters(filters) {
     console.log(`[FilterViz] Displaying ${filters.length} filters`);
+    console.log('[FilterViz] Filters received:', filters);
 
     currentFilters = filters;
 
@@ -91,15 +200,78 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
+    // Grouper les filtres par bloc de convolution en utilisant le champ layer_display
+    const filtersByBlock = {};
+    filters.forEach(filter => {
+      const blockName = filter.layer_display || '1er Bloc de Convolution';
+      if (!filtersByBlock[blockName]) {
+        filtersByBlock[blockName] = [];
+      }
+      filtersByBlock[blockName].push(filter);
+    });
+    
+    console.log('[FilterViz] Filters grouped by block:', filtersByBlock);
+
     // Afficher la grille immédiatement
-    filtersGrid.style.display = 'grid';
+    filtersGrid.style.display = 'block';
     showFiltersSection();
 
-    // Créer les éléments de filtre avec animation décalée
-    filters.forEach((filter, index) => {
-      setTimeout(() => {
-        createFilterElement(filter, index);
-      }, index * 50); // Délai réduit à 50ms entre chaque filtre
+    // Créer les sections pour chaque bloc avec grille 3x3
+    let filterIndex = 0;
+    Object.entries(filtersByBlock).forEach(([blockName, blockFilters]) => {
+      console.log(`[FilterViz] Creating block: ${blockName} with ${blockFilters.length} filters`);
+      
+      // Créer un container pour ce bloc
+      const blockContainer = document.createElement('div');
+      blockContainer.className = 'filter-block-container';
+      blockContainer.style.cssText = `
+        margin: 30px 0;
+        padding: 20px;
+        background: rgba(248, 249, 250, 0.8);
+        border-radius: 12px;
+        border-left: 4px solid #007bff;
+      `;
+      
+      // Créer le titre du bloc
+      const blockTitle = document.createElement('h3');
+      blockTitle.className = 'filter-block-title';
+      blockTitle.style.cssText = `
+        text-align: center;
+        color: #495057;
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0 0 20px 0;
+        padding: 10px;
+        background: rgba(0,123,255,0.1);
+        border-radius: 8px;
+      `;
+      blockTitle.textContent = blockName;
+      blockContainer.appendChild(blockTitle);
+      
+      // Créer une grille 3x1 pour les filtres de ce bloc
+      const blockGrid = document.createElement('div');
+      blockGrid.className = 'filter-block-grid';
+      blockGrid.style.cssText = `
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        justify-items: center;
+      `;
+      
+      // Ajouter les filtres de ce bloc
+      blockFilters.forEach((filter, filterInBlockIndex) => {
+        console.log(`[FilterViz] Adding filter ${filterInBlockIndex} to block ${blockName}:`, filter.title);
+        setTimeout(() => {
+          const filterElement = createFilterElement(filter, filterIndex);
+          blockGrid.appendChild(filterElement);
+        }, filterIndex * 50);
+        filterIndex++;
+      });
+      
+      blockContainer.appendChild(blockGrid);
+      filtersGrid.appendChild(blockContainer);
+      
+      console.log(`[FilterViz] Created block container for ${blockName} with ${blockFilters.length} filters`);
     });
   }
 
@@ -113,32 +285,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const filterImage = document.createElement('img');
     filterImage.className = 'filter-image';
     filterImage.src = filter.image;
-    filterImage.alt = `Filtre ${filter.title}`;
+    filterImage.alt = `${filter.title}`;
     filterImage.loading = 'eager'; // Charger immédiatement
 
-    // Titre du filtre
-    const filterTitle = document.createElement('div');
-    filterTitle.className = 'filter-title';
-    filterTitle.textContent = filter.title;
-
-    // Informations du filtre
+    // Informations du filtre (activation en gras comme titre principal)
     const filterInfo = document.createElement('div');
     filterInfo.className = 'filter-info';
-
-    // Extraire le nom de la couche pour l'affichage
-    const layerDisplay = filter.layer.includes('conv_1') ? 'Couche 1' :
-      filter.layer.includes('conv_2') ? 'Couche 2' :
-        filter.layer.includes('conv_3') ? 'Couche 3' :
-        filter.layer.includes('conv_4') ? 'Couche 4' : 'Couche ?';
-
     filterInfo.innerHTML = `
-          <div>${layerDisplay}</div>
-          <div>Activation: ${filter.variance ? filter.variance.toFixed(3) : 'N/A'}</div>
-      `;
+      <div class="activation-title">Activation: ${filter.variance ? filter.variance.toFixed(3) : 'N/A'}</div>
+    `;
 
-    // Ajouter les éléments
+    // Ajouter les éléments (pas de titre redondant)
     filterItem.appendChild(filterImage);
-    filterItem.appendChild(filterTitle);
     filterItem.appendChild(filterInfo);
 
     // Ajouter un effet de hover avec info-bulle
@@ -156,17 +314,18 @@ document.addEventListener('DOMContentLoaded', function () {
       filterImage.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiBmaWxsPSIjZjhmOWZhIi8+CjxwYXRoIGQ9Ik02MCA0MEw4MCA4MEg0MEw2MCA0MFoiIGZpbGw9IiNkZWUyZTYiLz4KPHRleHQgeD0iNjAiIHk9IjEwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzZjNzU3ZCIgZm9udC1zaXplPSIxMiI+RXJyZXVyPC90ZXh0Pgo8L3N2Zz4=';
     });
 
-    // Ajouter avec une animation d'entrée
+    // Préparer pour l'animation d'entrée
     filterItem.style.opacity = '0';
     filterItem.style.transform = 'translateY(20px)';
-    filtersGrid.appendChild(filterItem);
-
-    // Déclencher l'animation après ajout au DOM
-    requestAnimationFrame(() => {
+    
+    // Déclencher l'animation après ajout au DOM (sera fait par l'appelant)
+    setTimeout(() => {
       filterItem.style.transition = 'all 0.3s ease-out';
       filterItem.style.opacity = '1';
       filterItem.style.transform = 'translateY(0)';
-    });
+    }, 50);
+
+    return filterItem;
   }
 
   // Afficher un message quand il n'y a pas de filtres
@@ -191,9 +350,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const tooltip = document.createElement('div');
     tooltip.className = 'filter-tooltip';
+    
+    const layerDisplay = filter.layer_display || filter.layer;
+    
     tooltip.innerHTML = `
           <strong>${filter.title}</strong><br>
-          Couche: ${filter.layer}<br>
+          ${layerDisplay}<br>
           Activation: ${filter.variance ? filter.variance.toFixed(4) : 'N/A'}<br>
           <em>Ce filtre détecte des motifs spécifiques dans l'image</em>
       `;
@@ -258,9 +420,17 @@ document.addEventListener('DOMContentLoaded', function () {
     return filtersEnabled;
   }
 
-  // Obtenir le paramètre à ajouter aux requêtes
+  // Obtenir les paramètres à ajouter aux requêtes
   function getFilterParameter() {
     return filtersEnabled ? 'true' : 'false';
+  }
+
+  // Obtenir les paramètres complets pour les requêtes
+  function getFilterParameters() {
+    return {
+      show_filters: filtersEnabled ? 'true' : 'false',
+      best_filters: bestFiltersEnabled ? 'true' : 'false'
+    };
   }
 
   // Exposer l'API pour les autres scripts
@@ -269,8 +439,13 @@ document.addEventListener('DOMContentLoaded', function () {
     hideFilters,
     areFiltersEnabled,
     getFilterParameter,
+    getFilterParameters,
     showFiltersSection,
-    hideFiltersSection
+    hideFiltersSection,
+    updateBestFiltersIndicator,
+    // Getters pour l'état
+    isBestFiltersEnabled: () => bestFiltersEnabled,
+    isFiltersEnabled: () => filtersEnabled
   };
 
   // Intégration avec le système de nettoyage
@@ -281,5 +456,59 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  console.log('[FilterViz] Filter visualization system initialized');
+  // Ajouter un indicateur visuel pour le mode meilleurs filtres
+  function updateBestFiltersIndicator() {
+    const existingIndicator = document.querySelector('.best-filters-indicator');
+    if (existingIndicator) {
+      existingIndicator.remove();
+    }
+
+    if (bestFiltersEnabled) {
+      const indicator = document.createElement('div');
+      indicator.className = 'best-filters-indicator';
+      indicator.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #28a745;
+        color: white;
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: bold;
+        z-index: 1000;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        animation: pulseGreen 2s infinite;
+      `;
+      indicator.innerHTML = '🎯 Mode meilleurs filtres actif';
+
+      // Ajouter l'animation si pas déjà présente
+      if (!document.getElementById('best-filters-animation')) {
+        const style = document.createElement('style');
+        style.id = 'best-filters-animation';
+        style.textContent = `
+          @keyframes pulseGreen {
+            0% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.9; }
+          }
+        `;
+        document.head.appendChild(style);
+      }
+
+      document.body.appendChild(indicator);
+
+      // Supprimer l'indicateur après 5 secondes
+      setTimeout(() => {
+        if (indicator.parentNode) {
+          indicator.style.transition = 'all 0.3s ease-out';
+          indicator.style.opacity = '0';
+          indicator.style.transform = 'translateX(100px)';
+          setTimeout(() => indicator.remove(), 300);
+        }
+      }, 5000);
+    }
+  }
+
+  console.log('[FilterViz] Filter visualization system initialized with best filters support');
 });
